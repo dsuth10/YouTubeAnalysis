@@ -250,9 +250,9 @@ app.get('/api/models', async (req, res) => {
         if (!apiKey) {
             return res.json({
                 models: [
-                    { id: 'openai/gpt-3.5-turbo', name: 'GPT-3.5 Turbo (Fast & Cheap)' },
-                    { id: 'openai/gpt-4', name: 'GPT-4 (More Accurate)' },
-                    { id: 'anthropic/claude-2', name: 'Claude 2 (Balanced)' }
+                    { id: 'openai/gpt-3.5-turbo', name: 'GPT-3.5 Turbo (Fast & Cheap)', pricing: { input: 0.0005, output: 0.0015 } },
+                    { id: 'openai/gpt-4', name: 'GPT-4 (More Accurate)', pricing: { input: 0.03, output: 0.06 } },
+                    { id: 'anthropic/claude-2', name: 'Claude 2 (Balanced)', pricing: { input: 0.008, output: 0.024 } }
                 ]
             });
         }
@@ -263,22 +263,33 @@ app.get('/api/models', async (req, res) => {
             }
         });
 
+        // Process all available models
         const models = response.data.data
-            .filter(model => model.id.includes('gpt') || model.id.includes('claude'))
+            .filter(model => model.context_length > 0) // Only include models with context
             .map(model => ({
                 id: model.id,
-                name: `${model.name} (${model.id})`
+                name: model.name || model.id,
+                description: model.description || '',
+                context_length: model.context_length,
+                pricing: model.pricing || { input: 0, output: 0 },
+                provider: model.id.split('/')[0] || 'unknown'
             }))
-            .slice(0, 10); // Limit to top 10
+            .sort((a, b) => {
+                // Sort by provider first, then by name
+                if (a.provider !== b.provider) {
+                    return a.provider.localeCompare(b.provider);
+                }
+                return a.name.localeCompare(b.name);
+            });
 
         res.json({ models });
     } catch (error) {
         console.error('Error fetching models:', error);
         res.json({
             models: [
-                { id: 'openai/gpt-3.5-turbo', name: 'GPT-3.5 Turbo (Fast & Cheap)' },
-                { id: 'openai/gpt-4', name: 'GPT-4 (More Accurate)' },
-                { id: 'anthropic/claude-2', name: 'Claude 2 (Balanced)' }
+                { id: 'openai/gpt-3.5-turbo', name: 'GPT-3.5 Turbo (Fast & Cheap)', pricing: { input: 0.0005, output: 0.0015 } },
+                { id: 'openai/gpt-4', name: 'GPT-4 (More Accurate)', pricing: { input: 0.03, output: 0.06 } },
+                { id: 'anthropic/claude-2', name: 'Claude 2 (Balanced)', pricing: { input: 0.008, output: 0.024 } }
             ]
         });
     }

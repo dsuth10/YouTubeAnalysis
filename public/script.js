@@ -2,6 +2,8 @@
 const analysisForm = document.getElementById('analysisForm');
 const youtubeUrlInput = document.getElementById('youtubeUrl');
 const modelSelect = document.getElementById('modelSelect');
+const modelSearch = document.getElementById('modelSearch');
+const modelInfo = document.getElementById('modelInfo');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const loadingSection = document.getElementById('loadingSection');
 const resultSection = document.getElementById('resultSection');
@@ -58,6 +60,10 @@ document.addEventListener('DOMContentLoaded', function() {
 function setupEventListeners() {
     // Form submission
     analysisForm.addEventListener('submit', handleFormSubmit);
+    
+    // Model search functionality
+    modelSearch.addEventListener('input', filterModels);
+    modelSelect.addEventListener('change', updateModelInfo);
     
     // Action buttons
     downloadBtn.addEventListener('click', handleDownload);
@@ -238,25 +244,92 @@ function handleRetry() {
     }
 }
 
+// Global variable to store all models
+let allModels = [];
+
 // Load available models
 async function loadModels() {
     try {
         const response = await fetch('/api/models');
         const data = await response.json();
         
-        // Clear existing options
-        modelSelect.innerHTML = '';
+        // Store all models globally
+        allModels = data.models;
         
-        // Add new options
-        data.models.forEach(model => {
-            const option = document.createElement('option');
-            option.value = model.id;
-            option.textContent = model.name;
-            modelSelect.appendChild(option);
-        });
+        // Populate the select with all models
+        populateModelSelect(allModels);
+        
+        // Set default selection and update info
+        if (allModels.length > 0) {
+            modelSelect.value = allModels[0].id;
+            updateModelInfo();
+        }
         
     } catch (error) {
         console.error('Error loading models:', error);
+    }
+}
+
+// Populate model select dropdown
+function populateModelSelect(models) {
+    modelSelect.innerHTML = '';
+    
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = `${model.name} (${model.provider})`;
+        option.dataset.model = JSON.stringify(model);
+        modelSelect.appendChild(option);
+    });
+}
+
+// Filter models based on search input
+function filterModels() {
+    const searchTerm = modelSearch.value.toLowerCase();
+    const filteredModels = allModels.filter(model => 
+        model.name.toLowerCase().includes(searchTerm) ||
+        model.id.toLowerCase().includes(searchTerm) ||
+        model.provider.toLowerCase().includes(searchTerm)
+    );
+    
+    populateModelSelect(filteredModels);
+    
+    // Update model info if current selection is still valid
+    if (filteredModels.some(model => model.id === modelSelect.value)) {
+        updateModelInfo();
+    } else if (filteredModels.length > 0) {
+        modelSelect.value = filteredModels[0].id;
+        updateModelInfo();
+    }
+}
+
+// Update model info display
+function updateModelInfo() {
+    const selectedModel = allModels.find(model => model.id === modelSelect.value);
+    
+    if (selectedModel) {
+        const providerSpan = modelInfo.querySelector('.model-provider');
+        const pricingSpan = modelInfo.querySelector('.model-pricing');
+        const contextSpan = modelInfo.querySelector('.model-context');
+        
+        providerSpan.textContent = selectedModel.provider;
+        
+        if (selectedModel.pricing && selectedModel.pricing.input > 0) {
+            const inputCost = (selectedModel.pricing.input * 1000).toFixed(2);
+            const outputCost = (selectedModel.pricing.output * 1000).toFixed(2);
+            pricingSpan.textContent = `$${inputCost}/1K input, $${outputCost}/1K output`;
+        } else {
+            pricingSpan.textContent = 'Pricing not available';
+        }
+        
+        if (selectedModel.context_length) {
+            const contextK = Math.round(selectedModel.context_length / 1000);
+            contextSpan.textContent = `${contextK}K context`;
+        } else {
+            contextSpan.textContent = 'Context length unknown';
+        }
+    } else {
+        modelInfo.innerHTML = '<span class="model-provider">No model selected</span>';
     }
 }
 

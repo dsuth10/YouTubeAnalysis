@@ -37,11 +37,22 @@
                         <label for="modelSelect">
                             <i class="fas fa-brain"></i> AI Model
                         </label>
-                        <select id="modelSelect" name="modelSelect">
-                            <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo (Fast & Cheap)</option>
-                            <option value="openai/gpt-4">GPT-4 (More Accurate)</option>
-                            <option value="anthropic/claude-2">Claude 2 (Balanced)</option>
-                        </select>
+                        <div class="model-select-container">
+                            <input 
+                                type="text" 
+                                id="modelSearch" 
+                                placeholder="Search models..." 
+                                class="model-search"
+                            >
+                            <select id="modelSelect" name="modelSelect" class="model-select">
+                                <option value="">Loading models...</option>
+                            </select>
+                            <div class="model-info" id="modelInfo">
+                                <span class="model-provider"></span>
+                                <span class="model-pricing"></span>
+                                <span class="model-context"></span>
+                            </div>
+                        </div>
                     </div>
 
                     <button type="submit" id="analyzeBtn" class="analyze-btn">
