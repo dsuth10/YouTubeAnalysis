@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Research App</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fab fa-youtube"></i> YouTube Video Research</h1>
+                <p>Generate comprehensive markdown reports for YouTube videos with AI analysis</p>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="form-container">
+                <form id="analysisForm" class="analysis-form">
+                    <div class="form-group">
+                        <label for="youtubeUrl">
+                            <i class="fas fa-link"></i> YouTube Video URL
+                        </label>
+                        <input 
+                            type="url" 
+                            id="youtubeUrl" 
+                            name="youtubeUrl" 
+                            placeholder="https://www.youtube.com/watch?v=..." 
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="modelSelect">
+                            <i class="fas fa-brain"></i> AI Model
+                        </label>
+                        <select id="modelSelect" name="modelSelect">
+                            <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo (Fast & Cheap)</option>
+                            <option value="openai/gpt-4">GPT-4 (More Accurate)</option>
+                            <option value="anthropic/claude-2">Claude 2 (Balanced)</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" id="analyzeBtn" class="analyze-btn">
+                        <i class="fas fa-magic"></i> Analyze Video
+                    </button>
+                </form>
+            </div>
+
+            <div id="loadingSection" class="loading-section hidden">
+                <div class="loading-content">
+                    <div class="spinner"></div>
+                    <h3>Analyzing Video...</h3>
+                    <p id="loadingMessage">Fetching video information...</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="resultSection" class="result-section hidden">
+                <div class="result-header">
+                    <h2><i class="fas fa-check-circle"></i> Analysis Complete!</h2>
+                    <p>Your markdown report has been generated successfully.</p>
+                </div>
+
+                <div class="video-info">
+                    <div class="video-thumbnail">
+                        <img id="videoThumbnail" src="" alt="Video thumbnail">
+                    </div>
+                    <div class="video-details">
+                        <h3 id="videoTitle"></h3>
+                        <p id="videoChannel"></p>
+                        <div class="video-stats">
+                            <span id="videoViews"></span>
+                            <span id="videoLikes"></span>
+                            <span id="videoDate"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button id="downloadBtn" class="download-btn">
+                        <i class="fas fa-download"></i> Download Markdown
+                    </button>
+                    <button id="previewBtn" class="preview-btn">
+                        <i class="fas fa-eye"></i> Preview Report
+                    </button>
+                    <button id="newAnalysisBtn" class="new-analysis-btn">
+                        <i class="fas fa-plus"></i> New Analysis
+                    </button>
+                </div>
+
+                <div id="previewSection" class="preview-section hidden">
+                    <div class="preview-header">
+                        <h3>Markdown Preview</h3>
+                        <button id="closePreviewBtn" class="close-btn">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="markdownPreview" class="markdown-preview"></div>
+                </div>
+            </div>
+
+            <div id="errorSection" class="error-section hidden">
+                <div class="error-content">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>Error</h3>
+                    <p id="errorMessage"></p>
+                    <button id="retryBtn" class="retry-btn">
+                        <i class="fas fa-redo"></i> Try Again
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="footer-content">
+                <p>Powered by YouTube Data API & OpenRouter AI</p>
+                <div class="footer-links">
+                    <a href="#" id="settingsBtn">Settings</a>
+                    <a href="#" id="helpBtn">Help</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-cog"></i> Settings</h3>
+                <button class="close-btn" id="closeSettingsBtn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="youtubeApiKey">YouTube API Key</label>
+                    <input type="password" id="youtubeApiKey" placeholder="Enter your YouTube API key">
+                    <small>Get your API key from <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></small>
+                </div>
+                <div class="form-group">
+                    <label for="openrouterApiKey">OpenRouter API Key</label>
+                    <input type="password" id="openrouterApiKey" placeholder="Enter your OpenRouter API key">
+                    <small>Get your API key from <a href="https://openrouter.ai/" target="_blank">OpenRouter</a></small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="saveSettingsBtn" class="save-btn">Save Settings</button>
+                <button id="cancelSettingsBtn" class="cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-question-circle"></i> Help & Instructions</h3>
+                <button class="close-btn" id="closeHelpBtn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <h4>How to use this app:</h4>
+                <ol>
+                    <li>Paste a YouTube video URL in the input field</li>
+                    <li>Select an AI model for analysis (GPT-3.5 is fastest and cheapest)</li>
+                    <li>Click "Analyze Video" to generate your report</li>
+                    <li>Download the markdown file or preview the content</li>
+                    <li>Import the markdown into Notion for further organization</li>
+                </ol>
+                
+                <h4>API Keys Required:</h4>
+                <ul>
+                    <li><strong>YouTube API Key:</strong> For fetching video metadata</li>
+                    <li><strong>OpenRouter API Key:</strong> For AI content analysis</li>
+                </ul>
+                
+                <h4>Supported URL Formats:</h4>
+                <ul>
+                    <li>https://www.youtube.com/watch?v=VIDEO_ID</li>
+                    <li>https://youtu.be/VIDEO_ID</li>
+                    <li>https://youtube.com/embed/VIDEO_ID</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button id="closeHelpModalBtn" class="cancel-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 
