@@ -100,9 +100,51 @@
                     <button id="previewBtn" class="preview-btn">
                         <i class="fas fa-eye"></i> Preview Report
                     </button>
+                    <button id="exportBtn" class="export-btn">
+                        <i class="fas fa-database"></i> Export to Notion
+                    </button>
                     <button id="newAnalysisBtn" class="new-analysis-btn">
                         <i class="fas fa-plus"></i> New Analysis
                     </button>
+                </div>
+
+                <!-- Notion Integration Section -->
+                <div class="notion-section">
+                    <div class="notion-header">
+                        <h3><i class="fab fa-notion"></i> Save to Notion</h3>
+                        <div class="notion-status" id="notionStatus">
+                            <span class="status-indicator disconnected"></span>
+                            <span class="status-text">Not connected</span>
+                        </div>
+                    </div>
+                    
+                    <div class="notion-setup" id="notionSetup">
+                        <p>Connect your Notion account to save notes directly to a database.</p>
+                        <button id="connectNotionBtn" class="connect-notion-btn">
+                            <i class="fab fa-notion"></i> Connect Notion
+                        </button>
+                    </div>
+
+                    <div class="notion-connected hidden" id="notionConnected">
+                        <div class="database-selection">
+                            <label for="databaseSelect">Select Database:</label>
+                            <div class="database-controls">
+                                <select id="databaseSelect" class="database-select">
+                                    <option value="">Loading databases...</option>
+                                </select>
+                                <button id="refreshDatabasesBtn" class="refresh-btn" title="Refresh databases">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="save-controls">
+                            <button id="saveToNotionBtn" class="save-notion-btn" disabled>
+                                <i class="fas fa-save"></i> Save to Notion
+                            </button>
+                            <div class="save-status" id="saveStatus"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="previewSection" class="preview-section hidden">
@@ -158,6 +200,11 @@
                     <label for="openrouterApiKey">OpenRouter API Key</label>
                     <input type="password" id="openrouterApiKey" placeholder="Enter your OpenRouter API key">
                     <small>Get your API key from <a href="https://openrouter.ai/" target="_blank">OpenRouter</a></small>
+                </div>
+                <div class="form-group">
+                    <label for="notionToken">Notion Integration Token</label>
+                    <input type="password" id="notionToken" placeholder="Enter your Notion integration token">
+                    <small>Get your integration token from <a href="https://www.notion.so/my-integrations" target="_blank">Notion Integrations</a></small>
                 </div>
             </div>
             <div class="modal-footer">

@@ -22,6 +22,7 @@ const videoThumbnail = document.getElementById('videoThumbnail');
 // Action buttons
 const downloadBtn = document.getElementById('downloadBtn');
 const previewBtn = document.getElementById('previewBtn');
+const exportBtn = document.getElementById('exportBtn');
 const newAnalysisBtn = document.getElementById('newAnalysisBtn');
 const retryBtn = document.getElementById('retryBtn');
 
@@ -44,6 +45,7 @@ const closeHelpModalBtn = document.getElementById('closeHelpModalBtn');
 // API Keys
 const youtubeApiKeyInput = document.getElementById('youtubeApiKey');
 const openrouterApiKeyInput = document.getElementById('openrouterApiKey');
+const notionTokenInput = document.getElementById('notionToken');
 
 // Global variables
 let currentResult = null;
@@ -54,6 +56,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadModels();
     setupEventListeners();
     checkHealth();
+    initializeNotion();
 });
 
 // Setup event listeners
@@ -68,6 +71,7 @@ function setupEventListeners() {
     // Action buttons
     downloadBtn.addEventListener('click', handleDownload);
     previewBtn.addEventListener('click', handlePreview);
+    exportBtn.addEventListener('click', handleExportToNotion);
     newAnalysisBtn.addEventListener('click', handleNewAnalysis);
     retryBtn.addEventListener('click', handleRetry);
     
@@ -244,6 +248,47 @@ function handleRetry() {
     }
 }
 
+// Handle export to Notion
+async function handleExportToNotion() {
+    if (!currentResult) {
+        alert('No analysis result to export. Please analyze a video first.');
+        return;
+    }
+
+    try {
+        exportBtn.disabled = true;
+        exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exporting...';
+        
+        const response = await fetch('/api/saveToNotion', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                videoInfo: currentResult.videoInfo,
+                markdown: currentResult.markdown,
+                databaseId: selectedDatabaseId || null
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to export to Notion');
+        }
+        
+        // Success
+        alert(`✅ ${data.message}\n\nMain Page: ${data.pageUrl}\nAnalysis Page: ${data.childPageUrl}`);
+        
+    } catch (error) {
+        console.error('Export error:', error);
+        alert(`Export failed: ${error.message}`);
+    } finally {
+        exportBtn.disabled = false;
+        exportBtn.innerHTML = '<i class="fas fa-database"></i> Export to Notion';
+    }
+}
+
 // Global variable to store all models
 let allModels = [];
 
@@ -392,7 +437,8 @@ function closeSettings() {
 function saveSettings() {
     const settings = {
         youtubeApiKey: youtubeApiKeyInput.value,
-        openrouterApiKey: openrouterApiKeyInput.value
+        openrouterApiKey: openrouterApiKeyInput.value,
+        notionToken: notionTokenInput.value
     };
     
     localStorage.setItem('youtubeAnalysisSettings', JSON.stringify(settings));
@@ -401,12 +447,16 @@ function saveSettings() {
     // Reload models and check health
     loadModels();
     checkHealth();
+    
+    // Recheck Notion connection
+    setTimeout(checkNotionConnection, 1000);
 }
 
 function loadSettings() {
     const settings = JSON.parse(localStorage.getItem('youtubeAnalysisSettings') || '{}');
     youtubeApiKeyInput.value = settings.youtubeApiKey || '';
     openrouterApiKeyInput.value = settings.openrouterApiKey || '';
+    notionTokenInput.value = settings.notionToken || '';
 }
 
 // Help functions
@@ -475,4 +525,217 @@ function addAnimations() {
 }
 
 // Initialize animations
-addAnimations(); 
+addAnimations();
+
+// Notion Integration
+// DOM Elements for Notion
+const notionStatus = document.getElementById('notionStatus');
+const notionSetup = document.getElementById('notionSetup');
+const notionConnected = document.getElementById('notionConnected');
+const connectNotionBtn = document.getElementById('connectNotionBtn');
+const databaseSelect = document.getElementById('databaseSelect');
+const refreshDatabasesBtn = document.getElementById('refreshDatabasesBtn');
+const saveToNotionBtn = document.getElementById('saveToNotionBtn');
+const saveStatus = document.getElementById('saveStatus');
+
+// Global variables for Notion
+let notionDatabases = [];
+let selectedDatabaseId = null;
+
+// Initialize Notion integration
+function initializeNotion() {
+    // Add event listeners for Notion elements
+    connectNotionBtn.addEventListener('click', handleConnectNotion);
+    refreshDatabasesBtn.addEventListener('click', loadNotionDatabases);
+    databaseSelect.addEventListener('change', handleDatabaseSelect);
+    saveToNotionBtn.addEventListener('click', handleSaveToNotion);
+    
+    // Check if Notion token exists
+    checkNotionConnection();
+}
+
+// Check Notion connection status
+async function checkNotionConnection() {
+    try {
+        const response = await fetch('/api/health');
+        const data = await response.json();
+        
+        if (data.notionApi) {
+            updateNotionStatus('connected', 'Connected');
+            await loadNotionDatabases();
+        } else {
+            updateNotionStatus('disconnected', 'Not connected');
+        }
+    } catch (error) {
+        console.error('Error checking Notion connection:', error);
+        updateNotionStatus('disconnected', 'Connection error');
+    }
+}
+
+// Update Notion status display
+function updateNotionStatus(status, text) {
+    const indicator = notionStatus.querySelector('.status-indicator');
+    const statusText = notionStatus.querySelector('.status-text');
+    
+    indicator.className = `status-indicator ${status}`;
+    statusText.textContent = text;
+    
+    if (status === 'connected') {
+        notionSetup.classList.add('hidden');
+        notionConnected.classList.remove('hidden');
+    } else {
+        notionSetup.classList.remove('hidden');
+        notionConnected.classList.add('hidden');
+    }
+}
+
+// Handle Notion connection
+async function handleConnectNotion() {
+    try {
+        updateNotionStatus('loading', 'Connecting...');
+        connectNotionBtn.disabled = true;
+        
+        // Check if token is provided in settings
+        const settings = JSON.parse(localStorage.getItem('youtubeAnalysisSettings') || '{}');
+        if (!settings.notionToken) {
+            // Prompt user to enter token in settings
+            openSettings();
+            updateNotionStatus('disconnected', 'Token required');
+            connectNotionBtn.disabled = false;
+            return;
+        }
+        
+        // Test connection by fetching databases
+        await loadNotionDatabases();
+        
+    } catch (error) {
+        console.error('Error connecting to Notion:', error);
+        updateNotionStatus('disconnected', 'Connection failed');
+        connectNotionBtn.disabled = false;
+    }
+}
+
+// Load Notion databases
+async function loadNotionDatabases() {
+    try {
+        updateNotionStatus('loading', 'Loading databases...');
+        refreshDatabasesBtn.disabled = true;
+        
+        const response = await fetch('/api/notion/databases');
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to load databases');
+        }
+        
+        notionDatabases = data.databases;
+        populateDatabaseSelect();
+        
+        if (notionDatabases.length > 0) {
+            updateNotionStatus('connected', `Connected (${notionDatabases.length} databases)`);
+        } else {
+            updateNotionStatus('connected', 'Connected (no databases found)');
+        }
+        
+    } catch (error) {
+        console.error('Error loading Notion databases:', error);
+        
+        if (error.message.includes('Invalid Notion API token')) {
+            updateNotionStatus('disconnected', 'Invalid token');
+            openSettings();
+        } else if (error.message.includes('lacks required permissions')) {
+            updateNotionStatus('disconnected', 'Insufficient permissions');
+        } else {
+            updateNotionStatus('disconnected', 'Failed to load databases');
+        }
+    } finally {
+        refreshDatabasesBtn.disabled = false;
+    }
+}
+
+// Populate database select dropdown
+function populateDatabaseSelect() {
+    databaseSelect.innerHTML = '';
+    
+    if (notionDatabases.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No databases found';
+        databaseSelect.appendChild(option);
+        return;
+    }
+    
+    // Add default option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Select a database...';
+    databaseSelect.appendChild(defaultOption);
+    
+    // Add database options
+    notionDatabases.forEach(db => {
+        const option = document.createElement('option');
+        option.value = db.id;
+        option.textContent = db.title;
+        databaseSelect.appendChild(option);
+    });
+}
+
+// Handle database selection
+function handleDatabaseSelect() {
+    selectedDatabaseId = databaseSelect.value;
+    saveToNotionBtn.disabled = !selectedDatabaseId;
+    
+    if (selectedDatabaseId) {
+        saveStatus.textContent = `Ready to save to: ${databaseSelect.options[databaseSelect.selectedIndex].text}`;
+        saveStatus.className = 'save-status';
+    } else {
+        saveStatus.textContent = '';
+        saveStatus.className = 'save-status';
+    }
+}
+
+// Handle save to Notion
+async function handleSaveToNotion() {
+    if (!currentResult || !selectedDatabaseId) {
+        return;
+    }
+    
+    try {
+        saveToNotionBtn.disabled = true;
+        saveStatus.textContent = 'Saving to Notion...';
+        saveStatus.className = 'save-status loading';
+        
+        const response = await fetch('/api/notion/saveNote', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                databaseId: selectedDatabaseId,
+                videoInfo: currentResult.videoInfo,
+                markdown: currentResult.markdown
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to save to Notion');
+        }
+        
+        // Success
+        saveStatus.innerHTML = `
+            <span class="success">✅ ${data.message}</span>
+            <br><a href="${data.pageUrl}" target="_blank" style="color: #667eea; text-decoration: underline;">Open Main Page</a>
+            <br><a href="${data.childPageUrl}" target="_blank" style="color: #667eea; text-decoration: underline;">Open Analysis Page</a>
+        `;
+        saveStatus.className = 'save-status success';
+        
+    } catch (error) {
+        console.error('Error saving to Notion:', error);
+        saveStatus.textContent = `Error: ${error.message}`;
+        saveStatus.className = 'save-status error';
+    } finally {
+        saveToNotionBtn.disabled = false;
+    }
+} 

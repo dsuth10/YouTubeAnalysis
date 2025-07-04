@@ -353,6 +353,7 @@ body {
 
 .download-btn,
 .preview-btn,
+.export-btn,
 .new-analysis-btn {
     padding: 12px 24px;
     border: none;
@@ -387,6 +388,16 @@ body {
     transform: translateY(-1px);
 }
 
+.export-btn {
+    background: #000;
+    color: white;
+}
+
+.export-btn:hover {
+    background: #333;
+    transform: translateY(-1px);
+}
+
 .new-analysis-btn {
     background: #6c757d;
     color: white;
@@ -395,6 +406,221 @@ body {
 .new-analysis-btn:hover {
     background: #5a6268;
     transform: translateY(-1px);
+}
+
+/* Notion Integration Section */
+.notion-section {
+    background: #f8f9fa;
+    border-radius: 15px;
+    padding: 25px;
+    margin-top: 25px;
+    border: 2px solid #e9ecef;
+}
+
+.notion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.notion-header h3 {
+    color: #333;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.notion-header h3 i {
+    color: #000;
+    margin-right: 8px;
+}
+
+.notion-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-indicator.connected {
+    background: #28a745;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
+}
+
+.status-indicator.disconnected {
+    background: #dc3545;
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.2);
+}
+
+.status-indicator.loading {
+    background: #ffc107;
+    box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.2);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.notion-setup {
+    text-align: center;
+    padding: 20px 0;
+}
+
+.notion-setup p {
+    color: #666;
+    margin-bottom: 15px;
+}
+
+.connect-notion-btn {
+    background: #000;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.connect-notion-btn:hover {
+    background: #333;
+    transform: translateY(-1px);
+}
+
+.connect-notion-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.notion-connected {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.database-selection {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.database-selection label {
+    font-weight: 600;
+    color: #555;
+    font-size: 0.95rem;
+}
+
+.database-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.database-select {
+    flex: 1;
+    padding: 12px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    background: white;
+    transition: all 0.3s ease;
+}
+
+.database-select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.refresh-btn {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.refresh-btn:hover {
+    background: #5a6268;
+    transform: translateY(-1px);
+}
+
+.refresh-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.save-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.save-notion-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 15px 24px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.save-notion-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+}
+
+.save-notion-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.save-status {
+    min-height: 20px;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.save-status.success {
+    color: #28a745;
+}
+
+.save-status.error {
+    color: #dc3545;
+}
+
+.save-status.loading {
+    color: #ffc107;
 }
 
 /* Preview section */

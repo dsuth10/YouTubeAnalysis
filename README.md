@@ -7,6 +7,7 @@ A powerful web application that analyzes YouTube videos and generates comprehens
 - 🎥 **YouTube Video Analysis**: Extract metadata and transcripts from any YouTube video
 - 🤖 **AI-Powered Insights**: Generate comprehensive summaries using OpenRouter's AI models
 - 📝 **Notion-Ready Markdown**: Export beautifully formatted markdown files for Notion
+- 🔗 **Direct Notion Integration**: Save notes directly to your Notion databases
 - 🎨 **Modern UI**: Clean, responsive interface with beautiful animations
 - ⚡ **Fast & Efficient**: Optimized for quick analysis and processing
 - 🔧 **Configurable**: Support for multiple AI models and API configurations
@@ -29,6 +30,7 @@ For each YouTube video, the app generates a markdown report containing:
 - Node.js (v14 or higher)
 - YouTube Data API key
 - OpenRouter API key
+- Notion account (optional, for direct integration)
 
 ### Installation
 
@@ -52,6 +54,7 @@ For each YouTube video, the app generates a markdown report containing:
    ```env
    YOUTUBE_API_KEY=your_youtube_api_key_here
    OPENROUTER_API_KEY=your_openrouter_api_key_here
+   NOTION_TOKEN=your_notion_integration_token_here
    PORT=3000
    ```
 
@@ -88,6 +91,23 @@ For each YouTube video, the app generates a markdown report containing:
 - GPT-4: ~$0.03 per 1K tokens
 - Claude 2: ~$0.008 per 1K tokens
 
+### Notion Integration Token (Optional)
+
+For direct Notion integration:
+
+1. Go to [Notion Integrations](https://www.notion.so/my-integrations)
+2. Click **"New integration"**
+3. Name it (e.g., "YouTube Analysis App")
+4. Select your workspace
+5. Enable **Read content**, **Update content**, and **Insert content** capabilities
+6. Click **"Submit"**
+7. Copy the **Internal Integration Token** (starts with `secret_`)
+8. Add it to your `.env` file
+
+**Note**: You'll also need to share your Notion database with the integration. See [NOTION_SETUP.md](NOTION_SETUP.md) for detailed setup instructions.
+
+**Cost**: Free - Notion API has no usage costs
+
 ## Usage
 
 ### Basic Workflow
@@ -97,7 +117,7 @@ For each YouTube video, the app generates a markdown report containing:
 3. **Analyze**: Click "Analyze Video" to start the process
 4. **Review Results**: View the generated analysis and video information
 5. **Download**: Save the markdown file to your computer
-6. **Import to Notion**: Copy-paste or import the markdown into Notion
+6. **Save to Notion**: Use the direct Notion integration to save notes to your database
 
 ### Supported URL Formats
 
@@ -124,6 +144,7 @@ youtube-analysis-app/
 │   ├── styles.css        # CSS styles
 │   └── script.js         # Frontend JavaScript
 ├── output/               # Generated markdown files
+├── NOTION_SETUP.md       # Detailed Notion integration guide
 └── README.md            # This file
 ```
 
@@ -133,6 +154,8 @@ youtube-analysis-app/
 - `GET /api/models` - Get available AI models
 - `GET /api/health` - Check server and API status
 - `GET /api/download/:filename` - Download generated files
+- `GET /api/notion/databases` - Get available Notion databases
+- `POST /api/notion/saveNote` - Save note to Notion database
 
 ## Configuration Options
 
@@ -142,6 +165,7 @@ youtube-analysis-app/
 |----------|-------------|----------|
 | `YOUTUBE_API_KEY` | YouTube Data API key | Yes |
 | `OPENROUTER_API_KEY` | OpenRouter API key | Yes |
+| `NOTION_TOKEN` | Notion integration token | No |
 | `PORT` | Server port (default: 3000) | No |
 
 ### Customization
@@ -209,7 +233,7 @@ You can easily extend the app by:
 1. **Adding new AI models**: Modify the models endpoint
 2. **Customizing prompts**: Update the analysis prompt in `server.js`
 3. **Adding export formats**: Create new export functions
-4. **Integrating with Notion API**: Add direct Notion integration
+4. **Adding export formats**: Create new export functions
 
 ## Cost Analysis
 
@@ -253,7 +277,7 @@ If you encounter any issues or have questions:
 
 Future enhancements planned:
 
-- [ ] Direct Notion API integration
+- [x] Direct Notion API integration
 - [ ] Batch processing for multiple videos
 - [ ] Custom prompt templates
 - [ ] Export to other formats (PDF, Word)
