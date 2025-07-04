@@ -191,6 +191,31 @@ body {
     text-decoration: none;
 }
 
+/* Prompt Select Styles */
+.prompt-select {
+    width: 100%;
+    padding: 15px;
+    border: 2px solid #e1e5e9;
+    border-radius: 12px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background: #f8f9fa;
+}
+
+.prompt-select:focus {
+    outline: none;
+    border-color: #667eea;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-help {
+    font-size: 0.85rem;
+    color: #666;
+    margin-top: 5px;
+    font-style: italic;
+}
+
 .analyze-btn {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;

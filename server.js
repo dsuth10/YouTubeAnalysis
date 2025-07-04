@@ -7,6 +7,9 @@ const fs = require('fs').promises;
 const path = require('path');
 require('dotenv').config();
 
+// Global variable to cache prompts
+let cachedPrompts = null;
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -38,6 +41,105 @@ function extractVideoId(url) {
 // Utility function to sanitize filename
 function sanitizeFilename(filename) {
     return filename.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+}
+
+// Load and cache prompts from the prompts directory
+async function loadPrompts() {
+    try {
+        const promptsDir = path.join(__dirname, 'prompts');
+        const files = await fs.readdir(promptsDir);
+        
+        const prompts = [];
+        
+        for (const file of files) {
+            if (file.endsWith('.md')) {
+                try {
+                    const filePath = path.join(promptsDir, file);
+                    const content = await fs.readFile(filePath, 'utf8');
+                    
+                    // Skip empty files
+                    if (!content.trim()) {
+                        continue;
+                    }
+                    
+                    // Extract prompt name from first heading or filename
+                    const firstLine = content.split('\n')[0];
+                    let name = file.replace('.md', '');
+                    
+                    // If first line is a heading, use it as name
+                    if (firstLine.startsWith('#')) {
+                        name = firstLine.replace(/^#+\s*/, '').trim();
+                    } else {
+                        // Convert filename to display name
+                        name = name.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    }
+                    
+                    const id = file.replace('.md', '');
+                    
+                    prompts.push({
+                        id: id,
+                        name: name,
+                        content: content.trim()
+                    });
+                } catch (error) {
+                    console.error(`Error reading prompt file ${file}:`, error);
+                }
+            }
+        }
+        
+        // Add default prompt if no prompts found
+        if (prompts.length === 0) {
+            prompts.push({
+                id: 'default',
+                name: 'Default Analysis',
+                content: `You are an assistant that extracts key information from YouTube video transcripts. 
+
+Video Title: {{title}}
+Channel: {{channel}}
+Description: {{description}}
+
+Transcript: {{transcript}}
+
+Please analyze this video and provide a comprehensive summary in the following format:
+
+## Topics Covered
+- List the main topics and subjects discussed in the video
+
+## Key Workflows/Processes
+- Describe any step-by-step processes, workflows, or procedures mentioned
+
+## Important Concepts
+- Define and explain key concepts, terms, or ideas presented
+
+## Learnings/Takeaways
+- List the main insights, lessons, or actionable takeaways
+
+## Suggested Tags
+- Provide 5-10 relevant tags for categorizing this content
+
+Format your response in clean markdown with proper headings and bullet points. Focus on extracting the most valuable and actionable information from the video.`
+            });
+        }
+        
+        return prompts;
+    } catch (error) {
+        console.error('Error loading prompts:', error);
+        return [];
+    }
+}
+
+// Get prompts (with caching)
+async function getPrompts() {
+    if (cachedPrompts === null) {
+        cachedPrompts = await loadPrompts();
+    }
+    return cachedPrompts;
+}
+
+// Reload prompts (for development/testing)
+async function reloadPrompts() {
+    cachedPrompts = null;
+    return await getPrompts();
 }
 
 // Get video metadata from YouTube Data API
@@ -89,20 +191,34 @@ async function getVideoTranscript(videoId) {
 }
 
 // Analyze content with OpenRouter API
-async function analyzeContent(transcript, videoInfo, model) {
+async function analyzeContent(transcript, videoInfo, model, promptId = null) {
     try {
         const apiKey = process.env.OPENROUTER_API_KEY;
         if (!apiKey) {
             throw new Error('OpenRouter API key not configured');
         }
 
-        const prompt = `You are an assistant that extracts key information from YouTube video transcripts. 
+        let promptContent;
+        
+        if (promptId) {
+            // Load custom prompt
+            const prompts = await getPrompts();
+            const selectedPrompt = prompts.find(p => p.id === promptId);
+            
+            if (!selectedPrompt) {
+                throw new Error(`Prompt with ID '${promptId}' not found`);
+            }
+            
+            promptContent = selectedPrompt.content;
+        } else {
+            // Use default prompt
+            promptContent = `You are an assistant that extracts key information from YouTube video transcripts. 
 
-Video Title: ${videoInfo.title}
-Channel: ${videoInfo.channelTitle}
-Description: ${videoInfo.description.substring(0, 500)}...
+Video Title: {{title}}
+Channel: {{channel}}
+Description: {{description}}
 
-Transcript: ${transcript}
+Transcript: {{transcript}}
 
 Please analyze this video and provide a comprehensive summary in the following format:
 
@@ -122,6 +238,14 @@ Please analyze this video and provide a comprehensive summary in the following f
 - Provide 5-10 relevant tags for categorizing this content
 
 Format your response in clean markdown with proper headings and bullet points. Focus on extracting the most valuable and actionable information from the video.`;
+        }
+
+        // Replace placeholders in the prompt
+        const processedPrompt = promptContent
+            .replace(/\{\{title\}\}/g, videoInfo.title)
+            .replace(/\{\{channel\}\}/g, videoInfo.channelTitle)
+            .replace(/\{\{description\}\}/g, videoInfo.description.substring(0, 500) + '...')
+            .replace(/\{\{transcript\}\}/g, transcript);
 
         const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
             model: model,
@@ -132,7 +256,7 @@ Format your response in clean markdown with proper headings and bullet points. F
                 },
                 {
                     role: 'user',
-                    content: prompt
+                    content: processedPrompt
                 }
             ],
             max_tokens: 2000,
@@ -242,7 +366,7 @@ ${analysis}
 // Main endpoint for processing videos
 app.post('/api/process', async (req, res) => {
     try {
-        const { url, model } = req.body;
+        const { url, model, promptId } = req.body;
         
         if (!url) {
             return res.status(400).json({ error: 'YouTube URL is required' });
@@ -261,8 +385,8 @@ app.post('/api/process', async (req, res) => {
         // Get transcript
         const transcript = await getVideoTranscript(videoId);
 
-        // Analyze content
-        const analysis = await analyzeContent(transcript, videoInfo, model || 'openai/gpt-3.5-turbo');
+        // Analyze content with selected prompt
+        const analysis = await analyzeContent(transcript, videoInfo, model || 'openai/gpt-3.5-turbo', promptId);
 
         // Generate title
         const title = await generateTitle(transcript, videoInfo, model || 'openai/gpt-3.5-turbo');
@@ -300,6 +424,53 @@ app.post('/api/process', async (req, res) => {
         console.error('Error processing video:', error);
         res.status(500).json({ 
             error: error.message || 'An error occurred while processing the video' 
+        });
+    }
+});
+
+// Get available prompts
+app.get('/api/prompts', async (req, res) => {
+    try {
+        const prompts = await getPrompts();
+        res.json({ prompts: prompts.map(p => ({ id: p.id, name: p.name })) });
+    } catch (error) {
+        console.error('Error fetching prompts:', error);
+        res.status(500).json({ error: 'Failed to load prompts' });
+    }
+});
+
+// Reload prompts (for development)
+app.post('/api/prompts/reload', async (req, res) => {
+    try {
+        const prompts = await reloadPrompts();
+        res.json({ 
+            success: true, 
+            message: 'Prompts reloaded successfully',
+            prompts: prompts.map(p => ({ id: p.id, name: p.name }))
+        });
+    } catch (error) {
+        console.error('Error reloading prompts:', error);
+        res.status(500).json({ error: 'Failed to reload prompts' });
+    }
+});
+
+// Health check endpoint
+app.get('/api/health', async (req, res) => {
+    try {
+        const prompts = await getPrompts();
+        res.json({ 
+            status: 'ok', 
+            youtubeApi: !!process.env.YOUTUBE_API_KEY,
+            openrouterApi: !!process.env.OPENROUTER_API_KEY,
+            notionApi: !!process.env.NOTION_TOKEN,
+            prompts: prompts.length,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date().toISOString()
         });
     }
 });
@@ -999,15 +1170,7 @@ app.post('/api/saveToNotion', async (req, res) => {
     }
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
-        youtubeApi: !!process.env.YOUTUBE_API_KEY,
-        openrouterApi: !!process.env.OPENROUTER_API_KEY,
-        notionApi: !!process.env.NOTION_TOKEN
-    });
-});
+
 
 app.listen(PORT, () => {
     console.log(`🚀 YouTube Analysis App running on http://localhost:${PORT}`);

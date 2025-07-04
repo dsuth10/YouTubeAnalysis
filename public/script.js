@@ -4,6 +4,7 @@ const youtubeUrlInput = document.getElementById('youtubeUrl');
 const modelSelect = document.getElementById('modelSelect');
 const modelSearch = document.getElementById('modelSearch');
 const modelInfo = document.getElementById('modelInfo');
+const promptSelect = document.getElementById('promptSelect');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const loadingSection = document.getElementById('loadingSection');
 const resultSection = document.getElementById('resultSection');
@@ -54,6 +55,7 @@ let currentResult = null;
 document.addEventListener('DOMContentLoaded', function() {
     loadSettings();
     loadModels();
+    loadPrompts();
     setupEventListeners();
     checkHealth();
     initializeNotion();
@@ -100,6 +102,7 @@ async function handleFormSubmit(e) {
     
     const url = youtubeUrlInput.value.trim();
     const model = modelSelect.value;
+    const promptId = promptSelect.value;
     
     if (!url) {
         showError('Please enter a YouTube URL');
@@ -113,7 +116,7 @@ async function handleFormSubmit(e) {
     }
     
     // Start analysis
-    await analyzeVideo(url, model);
+    await analyzeVideo(url, model, promptId);
 }
 
 // Validate YouTube URL
@@ -128,7 +131,7 @@ function isValidYouTubeUrl(url) {
 }
 
 // Analyze video
-async function analyzeVideo(url, model) {
+async function analyzeVideo(url, model, promptId) {
     try {
         showLoading();
         updateLoadingMessage('Fetching video information...');
@@ -138,7 +141,7 @@ async function analyzeVideo(url, model) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ url, model })
+            body: JSON.stringify({ url, model, promptId })
         });
         
         const data = await response.json();
@@ -340,6 +343,24 @@ async function loadModels() {
     }
 }
 
+// Load available prompts
+async function loadPrompts() {
+    try {
+        const response = await fetch('/api/prompts');
+        const data = await response.json();
+        
+        if (response.ok) {
+            populatePromptSelect(data.prompts);
+        } else {
+            console.error('Failed to load prompts:', data.error);
+            populatePromptSelect([]);
+        }
+    } catch (error) {
+        console.error('Error loading prompts:', error);
+        populatePromptSelect([]);
+    }
+}
+
 // Populate model select dropdown
 function populateModelSelect(models) {
     modelSelect.innerHTML = '';
@@ -350,6 +371,25 @@ function populateModelSelect(models) {
         option.textContent = `${model.name} (${model.provider})`;
         option.dataset.model = JSON.stringify(model);
         modelSelect.appendChild(option);
+    });
+}
+
+// Populate prompt select dropdown
+function populatePromptSelect(prompts) {
+    promptSelect.innerHTML = '';
+    
+    // Add default option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Default Analysis (General)';
+    promptSelect.appendChild(defaultOption);
+    
+    // Add all prompts
+    prompts.forEach(prompt => {
+        const option = document.createElement('option');
+        option.value = prompt.id;
+        option.textContent = prompt.name;
+        promptSelect.appendChild(option);
     });
 }
 

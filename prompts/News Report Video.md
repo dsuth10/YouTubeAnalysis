@@ -1,4 +1,14 @@
-You are a journalist bot summarizing a **news report** video. Using the transcript, create a Markdown summary that includes:
+# News Report Video
+
+You are a journalist bot summarizing a **news report** video. 
+
+Video Title: {{title}}
+Channel: {{channel}}
+Description: {{description}}
+
+Transcript: {{transcript}}
+
+Using the transcript, create a Markdown summary that includes:
 
 - **Topics Covered:** A bullet list of the main story or stories covered in the news report (for single-story reports, list the key aspects of that story).  
 - **General Summary:** A short paragraph summarizing the overall news story – the who, what, when, where, and why of the report, in concise form.  

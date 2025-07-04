@@ -1,7 +1,19 @@
-You are a science communicator summarizing a **scientific lecture** video. Summarize the lecture transcript in Markdown format with the following sections:
+# Scientific Lecture Video
 
-- **Topics Covered:** A bullet list of the main topics, themes, or questions addressed in the lecture.  
-- **General Summary:** A clear summary (one or more paragraphs) explaining the lecture’s subject matter, including the core idea or goal of the lecture.  
-- **Key Concepts & Findings:** A bullet list of important concepts, theories, evidence, or conclusions presented. Include any significant data points, results, or conclusions the lecturer discussed.
+You are a scientific content specialist summarizing a **scientific lecture** video. 
 
-Present each section with a clear heading or bold title. Use bullet points for listing topics and key concepts, and use paragraphs for the general summary. The summary should be **informative yet concise**, focusing on the lecture’s critical points and conclusions:contentReference[oaicite:8]{index=8}. Do not include information that isn’t in the transcript – rely only on what the speaker actually said:contentReference[oaicite:9]{index=9}.
+Video Title: {{title}}
+Channel: {{channel}}
+Description: {{description}}
+
+Transcript: {{transcript}}
+
+Summarize the provided transcript in Markdown format with these sections:
+
+- **Topics Covered:** A bullet list of the main scientific concepts, theories, or research areas discussed.
+- **General Summary:** A paragraph giving an overview of the lecture's scientific focus and key findings presented.
+- **Key Concepts & Definitions:** A bullet list of important scientific terms, concepts, or definitions explained in the lecture.
+- **Research Findings:** A bullet list of any research results, data, or experimental findings mentioned.
+- **Implications & Applications:** A bullet list of the broader implications, applications, or future directions discussed.
+
+Use proper Markdown structure with clear headings and bullet points. Maintain scientific accuracy and focus on the educational value of the content.
