@@ -151,8 +151,56 @@ Format your response in clean markdown with proper headings and bullet points. F
     }
 }
 
+// Generate consistent title with OpenRouter API
+async function generateTitle(transcript, videoInfo, model) {
+    try {
+        const apiKey = process.env.OPENROUTER_API_KEY;
+        if (!apiKey) {
+            throw new Error('OpenRouter API key not configured');
+        }
+
+        const titlePrompt = `You are an AI assistant that creates concise instructional titles for YouTube videos.
+
+Video Title: ${videoInfo.title}
+Video Description: ${videoInfo.description.substring(0, 500)}...
+Transcript: ${transcript}
+
+Task: Write a concise 5–10 word instructional title summarizing the main focus of this video. The title should clearly instruct or convey the key action or topic of the content.
+
+Output only the title (5–10 words):`;
+
+        const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+            model: model,
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are an assistant that generates concise instructional titles.'
+                },
+                {
+                    role: 'user',
+                    content: titlePrompt
+                }
+            ],
+            max_tokens: 20,
+            temperature: 0.3
+        }, {
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const newTitle = response.data.choices[0].message.content.trim();
+        return newTitle;
+    } catch (error) {
+        console.error('Error generating title:', error.message);
+        // Fallback to original title if title generation fails
+        return videoInfo.title;
+    }
+}
+
 // Generate markdown content
-function generateMarkdown(videoInfo, analysis) {
+function generateMarkdown(videoInfo, analysis, generatedTitle) {
     const publishDate = new Date(videoInfo.publishedAt).toLocaleDateString('en-AU', {
         year: 'numeric',
         month: 'long',
@@ -160,7 +208,7 @@ function generateMarkdown(videoInfo, analysis) {
     });
 
     const markdown = `---
-title: "${videoInfo.title}"
+title: "${generatedTitle}"
 url: "https://youtu.be/${videoInfo.videoId}"
 channel: "${videoInfo.channelTitle}"
 published: "${publishDate}"
@@ -168,7 +216,7 @@ views: ${videoInfo.viewCount}
 likes: ${videoInfo.likeCount}
 ---
 
-# ${videoInfo.title} (YouTube Summary)
+# ${generatedTitle} (YouTube Summary)
 
 **Channel:** ${videoInfo.channelTitle}  
 **Published:** ${publishDate}  
@@ -216,11 +264,18 @@ app.post('/api/process', async (req, res) => {
         // Analyze content
         const analysis = await analyzeContent(transcript, videoInfo, model || 'openai/gpt-3.5-turbo');
 
+        // Generate title
+        const title = await generateTitle(transcript, videoInfo, model || 'openai/gpt-3.5-turbo');
+        console.log(`Generated title: "${title}" (Original: "${videoInfo.title}")`);
+
+        // Add generated title to videoInfo
+        videoInfo.generatedTitle = title;
+
         // Generate markdown
-        const markdown = generateMarkdown(videoInfo, analysis);
+        const markdown = generateMarkdown(videoInfo, analysis, title);
 
         // Create filename
-        const filename = `${sanitizeFilename(videoInfo.title)}_${Date.now()}.md`;
+        const filename = `${sanitizeFilename(title)}_${Date.now()}.md`;
 
         // Save file
         const outputDir = path.join(__dirname, 'output');
@@ -376,7 +431,7 @@ app.post('/api/notion/saveNote', async (req, res) => {
                         {
                             type: 'text',
                             text: {
-                                content: videoInfo.title
+                                content: videoInfo.generatedTitle || videoInfo.title
                             }
                         }
                     ]
@@ -413,6 +468,9 @@ app.post('/api/notion/saveNote', async (req, res) => {
 
         // Step 2: Create child page with detailed content
         const childPageBlocks = createChildPageBlocks(videoInfo, markdown);
+        
+        // Notion has a limit of 100 blocks per request, so we need to split if needed
+        const maxBlocksPerRequest = 100;
         const childPage = await notion.pages.create({
             parent: {
                 page_id: mainPage.id
@@ -422,13 +480,24 @@ app.post('/api/notion/saveNote', async (req, res) => {
                     {
                         type: 'text',
                         text: {
-                            content: `${videoInfo.title} - Analysis`
+                            content: `${videoInfo.generatedTitle || videoInfo.title} - Analysis`
                         }
                     }
                 ]
             },
-            children: childPageBlocks
+            children: childPageBlocks.slice(0, maxBlocksPerRequest)
         });
+
+        // If we have more blocks, append them in chunks
+        if (childPageBlocks.length > maxBlocksPerRequest) {
+            for (let i = maxBlocksPerRequest; i < childPageBlocks.length; i += maxBlocksPerRequest) {
+                const chunk = childPageBlocks.slice(i, i + maxBlocksPerRequest);
+                await notion.blocks.children.append({
+                    block_id: childPage.id,
+                    children: chunk
+                });
+            }
+        }
 
         // Step 3: Update main page to link to child page
         const childPageUrl = `https://www.notion.so/${childPage.id.replace(/-/g, '')}`;
@@ -457,7 +526,14 @@ app.post('/api/notion/saveNote', async (req, res) => {
         } else if (error.code === 'forbidden') {
             res.status(403).json({ error: 'Notion integration lacks access to the selected database. Please ensure the database is shared with the integration.' });
         } else if (error.code === 'validation_error') {
-            res.status(400).json({ error: 'Database schema mismatch. Please ensure your Notion database has the required properties (Title, URL, Channel, Published Date, Views, Likes, Content).' });
+            if (error.message.includes('body.children.length')) {
+                res.status(400).json({ error: 'Content too long for Notion. The analysis has been truncated to fit Notion\'s limits.' });
+            } else {
+                res.status(400).json({ 
+                    error: 'Database schema mismatch. Please ensure your Notion database has the required properties: Title (title), URL (url), Channel (rich_text), Published Date (date), Views (number), Likes (number), Content (url).',
+                    details: error.message
+                });
+            }
         } else {
             res.status(500).json({ error: 'Failed to save note to Notion' });
         }
@@ -814,7 +890,7 @@ app.post('/api/saveToNotion', async (req, res) => {
                         {
                             type: 'text',
                             text: {
-                                content: videoInfo.title
+                                content: videoInfo.generatedTitle || videoInfo.title
                             }
                         }
                     ]
@@ -851,6 +927,9 @@ app.post('/api/saveToNotion', async (req, res) => {
 
         // Step 2: Create child page with detailed content
         const childPageBlocks = createChildPageBlocks(videoInfo, markdown);
+        
+        // Notion has a limit of 100 blocks per request, so we need to split if needed
+        const maxBlocksPerRequest = 100;
         const childPage = await notion.pages.create({
             parent: {
                 page_id: mainPage.id
@@ -860,13 +939,24 @@ app.post('/api/saveToNotion', async (req, res) => {
                     {
                         type: 'text',
                         text: {
-                            content: `${videoInfo.title} - Analysis`
+                            content: `${videoInfo.generatedTitle || videoInfo.title} - Analysis`
                         }
                     }
                 ]
             },
-            children: childPageBlocks
+            children: childPageBlocks.slice(0, maxBlocksPerRequest)
         });
+
+        // If we have more blocks, append them in chunks
+        if (childPageBlocks.length > maxBlocksPerRequest) {
+            for (let i = maxBlocksPerRequest; i < childPageBlocks.length; i += maxBlocksPerRequest) {
+                const chunk = childPageBlocks.slice(i, i + maxBlocksPerRequest);
+                await notion.blocks.children.append({
+                    block_id: childPage.id,
+                    children: chunk
+                });
+            }
+        }
 
         // Step 3: Update main page to link to child page
         const childPageUrl = `https://www.notion.so/${childPage.id.replace(/-/g, '')}`;
@@ -895,7 +985,14 @@ app.post('/api/saveToNotion', async (req, res) => {
         } else if (error.code === 'forbidden') {
             res.status(403).json({ error: 'Notion integration lacks access to the selected database. Please ensure the database is shared with the integration.' });
         } else if (error.code === 'validation_error') {
-            res.status(400).json({ error: 'Database schema mismatch. Please ensure your Notion database has the required properties (Title, URL, Channel, Published Date, Views, Likes, Content).' });
+            if (error.message.includes('body.children.length')) {
+                res.status(400).json({ error: 'Content too long for Notion. The analysis has been truncated to fit Notion\'s limits.' });
+            } else {
+                res.status(400).json({ 
+                    error: 'Database schema mismatch. Please ensure your Notion database has the required properties: Title (title), URL (url), Channel (rich_text), Published Date (date), Views (number), Likes (number), Content (url).',
+                    details: error.message
+                });
+            }
         } else {
             res.status(500).json({ error: 'Failed to save to Notion' });
         }

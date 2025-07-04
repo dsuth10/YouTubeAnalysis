@@ -172,8 +172,9 @@ function updateLoadingMessage(message) {
 function showResult(data) {
     hideAllSections();
     
-    // Update video info
-    videoTitle.textContent = data.videoInfo.title;
+    // Use generated title if available
+    const displayTitle = data.videoInfo.generatedTitle || data.videoInfo.title;
+    videoTitle.textContent = displayTitle;
     videoChannel.textContent = data.videoInfo.channelTitle;
     videoViews.textContent = formatNumber(data.videoInfo.viewCount) + ' views';
     videoLikes.textContent = formatNumber(data.videoInfo.likeCount) + ' likes';
@@ -181,7 +182,27 @@ function showResult(data) {
     
     // Set thumbnail
     videoThumbnail.src = `https://img.youtube.com/vi/${data.videoInfo.videoId}/mqdefault.jpg`;
-    videoThumbnail.alt = data.videoInfo.title;
+    videoThumbnail.alt = displayTitle;
+    
+    // Show AI badge if generatedTitle is present and different
+    const aiBadgeId = 'ai-title-badge';
+    let aiBadge = document.getElementById(aiBadgeId);
+    if (data.videoInfo.generatedTitle && data.videoInfo.generatedTitle !== data.videoInfo.title) {
+        if (!aiBadge) {
+            aiBadge = document.createElement('span');
+            aiBadge.id = aiBadgeId;
+            aiBadge.style.fontStyle = 'italic';
+            aiBadge.style.fontSize = '0.9em';
+            aiBadge.style.marginLeft = '8px';
+            aiBadge.style.color = '#4b8df8';
+            aiBadge.textContent = '(AI-generated title)';
+            videoTitle.parentNode.appendChild(aiBadge);
+        } else {
+            aiBadge.style.display = '';
+        }
+    } else if (aiBadge) {
+        aiBadge.style.display = 'none';
+    }
     
     resultSection.classList.remove('hidden');
     analyzeBtn.disabled = false;
@@ -259,13 +280,17 @@ async function handleExportToNotion() {
         exportBtn.disabled = true;
         exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exporting...';
         
+        const videoInfoToSend = { ...currentResult.videoInfo };
+        if (currentResult.videoInfo.generatedTitle) {
+            videoInfoToSend.generatedTitle = currentResult.videoInfo.generatedTitle;
+        }
         const response = await fetch('/api/saveToNotion', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                videoInfo: currentResult.videoInfo,
+                videoInfo: videoInfoToSend,
                 markdown: currentResult.markdown,
                 databaseId: selectedDatabaseId || null
             })
