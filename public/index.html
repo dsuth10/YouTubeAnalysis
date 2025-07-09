@@ -36,21 +36,49 @@
                     <div class="form-group">
                         <label for="modelSelect">
                             <i class="fas fa-brain"></i> AI Model
+                            <span class="model-stats" id="modelStats"></span>
                         </label>
                         <div class="model-select-container">
-                            <input 
-                                type="text" 
-                                id="modelSearch" 
-                                placeholder="Search models..." 
-                                class="model-search"
-                            >
-                            <select id="modelSelect" name="modelSelect" class="model-select">
-                                <option value="">Loading models...</option>
-                            </select>
+                            <div class="search-controls">
+                                <input 
+                                    type="text" 
+                                    id="modelSearch" 
+                                    placeholder="Search models... (Ctrl+F)" 
+                                    class="model-search"
+                                    title="Search models (Ctrl+F)"
+                                >
+                                <label class="favorites-only-checkbox">
+                                    <input type="checkbox" id="favoritesOnlyCheckbox">
+                                    <span>Favorites only</span>
+                                </label>
+                                <button 
+                                    type="button" 
+                                    id="favoritesFilterBtn" 
+                                    class="favorites-filter-btn" 
+                                    title="Show only favorites"
+                                >
+                                    <i class="fas fa-star"></i>
+                                </button>
+                            </div>
+                            <div class="model-select-wrapper">
+                                <select id="modelSelect" name="modelSelect" class="model-select">
+                                    <option value="">Loading models...</option>
+                                </select>
+                                <button 
+                                    type="button" 
+                                    id="favoriteToggleBtn" 
+                                    class="favorite-toggle-btn" 
+                                    title="Toggle favorite (Ctrl+S)"
+                                    aria-label="Toggle favorite for selected model"
+                                >
+                                    <i class="far fa-star"></i>
+                                </button>
+                            </div>
                             <div class="model-info" id="modelInfo">
                                 <span class="model-provider"></span>
                                 <span class="model-pricing"></span>
                                 <span class="model-context"></span>
+                                <span class="favorite-count" id="favoriteCount"></span>
                             </div>
                         </div>
                     </div>
@@ -215,6 +243,28 @@
                     <label for="notionToken">Notion Integration Token</label>
                     <input type="password" id="notionToken" placeholder="Enter your Notion integration token">
                     <small>Get your integration token from <a href="https://www.notion.so/my-integrations" target="_blank">Notion Integrations</a></small>
+                </div>
+                
+                <!-- Favorites Management Section -->
+                <div class="form-group">
+                    <label><i class="fas fa-star"></i> Model Favorites</label>
+                    <div class="favorites-management">
+                        <div class="favorites-info">
+                            <span id="favoritesCount">0 favorites</span>
+                        </div>
+                        <div class="favorites-actions">
+                            <button type="button" id="clearFavoritesBtn" class="clear-favorites-btn">
+                                <i class="fas fa-trash"></i> Clear All
+                            </button>
+                            <button type="button" id="exportFavoritesBtn" class="export-favorites-btn">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                            <button type="button" id="importFavoritesBtn" class="import-favorites-btn">
+                                <i class="fas fa-upload"></i> Import
+                            </button>
+                        </div>
+                        <input type="file" id="importFavoritesInput" accept=".json" style="display: none;">
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">

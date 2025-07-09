@@ -4,6 +4,11 @@ const youtubeUrlInput = document.getElementById('youtubeUrl');
 const modelSelect = document.getElementById('modelSelect');
 const modelSearch = document.getElementById('modelSearch');
 const modelInfo = document.getElementById('modelInfo');
+const favoriteToggleBtn = document.getElementById('favoriteToggleBtn');
+const favoriteCount = document.getElementById('favoriteCount');
+const favoritesOnlyCheckbox = document.getElementById('favoritesOnlyCheckbox');
+const favoritesFilterBtn = document.getElementById('favoritesFilterBtn');
+const modelStats = document.getElementById('modelStats');
 const promptSelect = document.getElementById('promptSelect');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const loadingSection = document.getElementById('loadingSection');
@@ -48,12 +53,22 @@ const youtubeApiKeyInput = document.getElementById('youtubeApiKey');
 const openrouterApiKeyInput = document.getElementById('openrouterApiKey');
 const notionTokenInput = document.getElementById('notionToken');
 
+// Favorites Management Elements
+const favoritesCount = document.getElementById('favoritesCount');
+const clearFavoritesBtn = document.getElementById('clearFavoritesBtn');
+const exportFavoritesBtn = document.getElementById('exportFavoritesBtn');
+const importFavoritesBtn = document.getElementById('importFavoritesBtn');
+const importFavoritesInput = document.getElementById('importFavoritesInput');
+
 // Global variables
 let currentResult = null;
+let allModels = []; // Store all available models
+let favoriteModels = []; // Store favorite model IDs
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', function() {
     loadSettings();
+    loadFavorites(); // Load favorites before models
     loadModels();
     loadPrompts();
     setupEventListeners();
@@ -69,6 +84,11 @@ function setupEventListeners() {
     // Model search functionality
     modelSearch.addEventListener('input', filterModels);
     modelSelect.addEventListener('change', updateModelInfo);
+    
+    // Favorite toggle functionality
+    favoriteToggleBtn.addEventListener('click', handleFavoriteToggle);
+    favoritesOnlyCheckbox.addEventListener('change', filterModels);
+    favoritesFilterBtn.addEventListener('click', toggleFavoritesFilter);
     
     // Action buttons
     downloadBtn.addEventListener('click', handleDownload);
@@ -89,10 +109,31 @@ function setupEventListeners() {
     cancelSettingsBtn.addEventListener('click', closeSettings);
     closeHelpModalBtn.addEventListener('click', closeHelp);
     
+    // Favorites management
+    clearFavoritesBtn.addEventListener('click', clearAllFavorites);
+    exportFavoritesBtn.addEventListener('click', exportFavorites);
+    importFavoritesBtn.addEventListener('click', () => importFavoritesInput.click());
+    importFavoritesInput.addEventListener('change', handleImportFavorites);
+    
     // Close modals on outside click
     window.addEventListener('click', function(event) {
         if (event.target === settingsModal) closeSettings();
         if (event.target === helpModal) closeHelp();
+    });
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(event) {
+        // Ctrl/Cmd + F to focus on model search
+        if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+            event.preventDefault();
+            modelSearch.focus();
+        }
+        
+        // Ctrl/Cmd + S to toggle favorite for selected model
+        if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+            event.preventDefault();
+            handleFavoriteToggle();
+        }
     });
 }
 
@@ -317,17 +358,24 @@ async function handleExportToNotion() {
     }
 }
 
-// Global variable to store all models
-let allModels = [];
-
 // Load available models
 async function loadModels() {
     try {
         const response = await fetch('/api/models');
         const data = await response.json();
         
-        // Store all models globally
-        allModels = data.models;
+        // Store all models globally and add favorite status
+        allModels = data.models.map(model => ({
+            ...model,
+            isFavorite: isFavorite(model.id)
+        }));
+        
+        // Sort models: favorites first, then alphabetically
+        allModels.sort((a, b) => {
+            if (a.isFavorite && !b.isFavorite) return -1;
+            if (!a.isFavorite && b.isFavorite) return 1;
+            return a.name.localeCompare(b.name);
+        });
         
         // Populate the select with all models
         populateModelSelect(allModels);
@@ -337,6 +385,9 @@ async function loadModels() {
             modelSelect.value = allModels[0].id;
             updateModelInfo();
         }
+        
+        // Update model statistics
+        updateModelStats();
         
     } catch (error) {
         console.error('Error loading models:', error);
@@ -365,10 +416,45 @@ async function loadPrompts() {
 function populateModelSelect(models) {
     modelSelect.innerHTML = '';
     
-    models.forEach(model => {
+    // Add favorites section if there are favorites
+    const favoriteModels = models.filter(model => model.isFavorite);
+    const nonFavoriteModels = models.filter(model => !model.isFavorite);
+    
+    if (favoriteModels.length > 0) {
+        // Add favorites section header
+        const favoritesHeader = document.createElement('option');
+        favoritesHeader.disabled = true;
+        favoritesHeader.textContent = '★ Favorites';
+        favoritesHeader.style.fontWeight = 'bold';
+        favoritesHeader.style.backgroundColor = '#f8f9fa';
+        modelSelect.appendChild(favoritesHeader);
+        
+        // Add favorite models
+        favoriteModels.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = `★ ${model.name} (${model.provider})`;
+            option.dataset.model = JSON.stringify(model);
+            option.style.backgroundColor = '#fff3cd';
+            option.style.fontWeight = '500';
+            modelSelect.appendChild(option);
+        });
+        
+        // Add separator if there are non-favorites
+        if (nonFavoriteModels.length > 0) {
+            const separator = document.createElement('option');
+            separator.disabled = true;
+            separator.textContent = '──────────';
+            separator.style.backgroundColor = '#f8f9fa';
+            modelSelect.appendChild(separator);
+        }
+    }
+    
+    // Add non-favorite models
+    nonFavoriteModels.forEach(model => {
         const option = document.createElement('option');
         option.value = model.id;
-        option.textContent = `${model.name} (${model.provider})`;
+        option.textContent = `☆ ${model.name} (${model.provider})`;
         option.dataset.model = JSON.stringify(model);
         modelSelect.appendChild(option);
     });
@@ -396,11 +482,29 @@ function populatePromptSelect(prompts) {
 // Filter models based on search input
 function filterModels() {
     const searchTerm = modelSearch.value.toLowerCase();
-    const filteredModels = allModels.filter(model => 
-        model.name.toLowerCase().includes(searchTerm) ||
-        model.id.toLowerCase().includes(searchTerm) ||
-        model.provider.toLowerCase().includes(searchTerm)
-    );
+    const showFavoritesOnly = favoritesOnlyCheckbox.checked;
+    
+    // Update filter button state
+    favoritesFilterBtn.classList.toggle('active', showFavoritesOnly);
+    
+    let filteredModels = allModels.filter(model => {
+        // First filter by favorites only if checkbox is checked
+        if (showFavoritesOnly && !model.isFavorite) {
+            return false;
+        }
+        
+        // Then filter by search term
+        return model.name.toLowerCase().includes(searchTerm) ||
+               model.id.toLowerCase().includes(searchTerm) ||
+               model.provider.toLowerCase().includes(searchTerm);
+    });
+    
+    // Sort filtered models: favorites first, then alphabetically
+    filteredModels.sort((a, b) => {
+        if (a.isFavorite && !b.isFavorite) return -1;
+        if (!a.isFavorite && b.isFavorite) return 1;
+        return a.name.localeCompare(b.name);
+    });
     
     populateModelSelect(filteredModels);
     
@@ -438,8 +542,17 @@ function updateModelInfo() {
         } else {
             contextSpan.textContent = 'Context length unknown';
         }
+        
+        // Update favorite toggle button
+        updateFavoriteToggle(selectedModel);
+        
+        // Update favorite count
+        updateFavoriteCount();
     } else {
         modelInfo.innerHTML = '<span class="model-provider">No model selected</span>';
+        favoriteToggleBtn.classList.remove('favorited');
+        favoriteToggleBtn.innerHTML = '<i class="far fa-star"></i>';
+        favoriteCount.textContent = '';
     }
 }
 
@@ -493,6 +606,7 @@ function showApiWarning(healthData) {
 function openSettings() {
     settingsModal.classList.remove('hidden');
     loadSettings();
+    updateFavoriteCount(); // Update favorites count in settings
 }
 
 function closeSettings() {
@@ -803,4 +917,261 @@ async function handleSaveToNotion() {
     } finally {
         saveToNotionBtn.disabled = false;
     }
+}
+
+// ===== FAVORITES MANAGEMENT FUNCTIONS =====
+
+// Load favorites from localStorage
+function loadFavorites() {
+    try {
+        const stored = localStorage.getItem('youtubeAnalysisFavorites');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+                favoriteModels = parsed;
+            } else {
+                favoriteModels = [];
+            }
+        } else {
+            favoriteModels = [];
+        }
+    } catch (error) {
+        console.error('Error loading favorites:', error);
+        favoriteModels = [];
+    }
+}
+
+// Save favorites to localStorage
+function saveFavorites() {
+    try {
+        localStorage.setItem('youtubeAnalysisFavorites', JSON.stringify(favoriteModels));
+    } catch (error) {
+        console.error('Error saving favorites:', error);
+        // Handle localStorage quota exceeded
+        if (error.name === 'QuotaExceededError') {
+            showError('Storage limit exceeded. Please remove some favorites.');
+        }
+    }
+}
+
+// Toggle favorite status for a model
+function toggleFavorite(modelId) {
+    const index = favoriteModels.indexOf(modelId);
+    const model = allModels.find(m => m.id === modelId);
+    
+    if (index > -1) {
+        // Remove from favorites
+        favoriteModels.splice(index, 1);
+        showNotification(`${model.name} removed from favorites`, 'info');
+    } else {
+        // Add to favorites
+        favoriteModels.push(modelId);
+        showNotification(`${model.name} added to favorites`, 'success');
+    }
+    
+    saveFavorites();
+    updateModelDisplay();
+}
+
+// Check if a model is favorited
+function isFavorite(modelId) {
+    return favoriteModels.includes(modelId);
+}
+
+// Update model display with favorites
+function updateModelDisplay() {
+    if (allModels.length > 0) {
+        // Update favorite status for all models
+        allModels.forEach(model => {
+            model.isFavorite = isFavorite(model.id);
+        });
+        
+        // Sort models: favorites first, then alphabetically
+        allModels.sort((a, b) => {
+            if (a.isFavorite && !b.isFavorite) return -1;
+            if (!a.isFavorite && b.isFavorite) return 1;
+            return a.name.localeCompare(b.name);
+        });
+        
+        populateModelSelect(allModels);
+        
+        // Restore current selection if it exists
+        if (modelSelect.value && allModels.some(model => model.id === modelSelect.value)) {
+            updateModelInfo();
+        } else if (allModels.length > 0) {
+            modelSelect.value = allModels[0].id;
+            updateModelInfo();
+        }
+    }
+}
+
+// Handle favorite star click
+function handleFavoriteClick(event, modelId) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    toggleFavorite(modelId);
+    
+    // Add visual feedback
+    const star = event.target;
+    star.style.transform = 'scale(1.2)';
+    setTimeout(() => {
+        star.style.transform = 'scale(1)';
+    }, 150);
+}
+
+// Clear all favorites
+function clearAllFavorites() {
+    if (confirm('Are you sure you want to clear all favorites?')) {
+        favoriteModels = [];
+        saveFavorites();
+        updateModelDisplay();
+    }
+}
+
+// Handle favorite toggle button click
+function handleFavoriteToggle() {
+    const selectedModelId = modelSelect.value;
+    if (selectedModelId) {
+        toggleFavorite(selectedModelId);
+    }
+}
+
+// Update favorite toggle button appearance
+function updateFavoriteToggle(model) {
+    if (model.isFavorite) {
+        favoriteToggleBtn.classList.add('favorited');
+        favoriteToggleBtn.innerHTML = '<i class="fas fa-star"></i>';
+        favoriteToggleBtn.title = 'Remove from favorites';
+    } else {
+        favoriteToggleBtn.classList.remove('favorited');
+        favoriteToggleBtn.innerHTML = '<i class="far fa-star"></i>';
+        favoriteToggleBtn.title = 'Add to favorites';
+    }
+}
+
+// Update favorite count display
+function updateFavoriteCount() {
+    if (favoriteModels.length > 0) {
+        favoriteCount.textContent = `${favoriteModels.length} favorite${favoriteModels.length !== 1 ? 's' : ''}`;
+    } else {
+        favoriteCount.textContent = '';
+    }
+    
+    // Update settings modal count
+    if (favoritesCount) {
+        favoritesCount.textContent = `${favoriteModels.length} favorite${favoriteModels.length !== 1 ? 's' : ''}`;
+    }
+    
+    // Update model stats
+    updateModelStats();
+}
+
+// Update model statistics
+function updateModelStats() {
+    if (modelStats && allModels.length > 0) {
+        const totalModels = allModels.length;
+        const favoriteCount = favoriteModels.length;
+        modelStats.textContent = `(${totalModels} models, ${favoriteCount} favorite${favoriteCount !== 1 ? 's' : ''})`;
+    }
+}
+
+// Export favorites to JSON file
+function exportFavorites() {
+    try {
+        const favoritesData = {
+            favorites: favoriteModels,
+            exportDate: new Date().toISOString(),
+            version: '1.0'
+        };
+        
+        const dataStr = JSON.stringify(favoritesData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(dataBlob);
+        link.download = `youtube-analysis-favorites-${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        
+        URL.revokeObjectURL(link.href);
+    } catch (error) {
+        console.error('Error exporting favorites:', error);
+        showError('Failed to export favorites');
+    }
+}
+
+// Handle import favorites from file
+function handleImportFavorites(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            
+            if (data.favorites && Array.isArray(data.favorites)) {
+                // Validate that all favorites are valid model IDs
+                const validModels = allModels.map(model => model.id);
+                const validFavorites = data.favorites.filter(id => validModels.includes(id));
+                
+                if (validFavorites.length !== data.favorites.length) {
+                    const invalidCount = data.favorites.length - validFavorites.length;
+                    alert(`Warning: ${invalidCount} favorite(s) were not found in the current model list and will be skipped.`);
+                }
+                
+                favoriteModels = validFavorites;
+                saveFavorites();
+                updateModelDisplay();
+                
+                alert(`Successfully imported ${validFavorites.length} favorite(s)!`);
+            } else {
+                throw new Error('Invalid favorites file format');
+            }
+        } catch (error) {
+            console.error('Error importing favorites:', error);
+            alert('Error importing favorites. Please check the file format.');
+        }
+    };
+    
+    reader.readAsText(file);
+    event.target.value = ''; // Reset file input
+}
+
+// Toggle favorites filter
+function toggleFavoritesFilter() {
+    favoritesOnlyCheckbox.checked = !favoritesOnlyCheckbox.checked;
+    favoritesFilterBtn.classList.toggle('active', favoritesOnlyCheckbox.checked);
+    filterModels();
+}
+
+// Show notification toast
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.innerHTML = `
+        <div class="notification-content">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Show notification
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 100);
+    
+    // Remove notification after 3 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 3000);
 } 

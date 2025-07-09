@@ -89,6 +89,13 @@ body {
     color: #667eea;
 }
 
+.model-stats {
+    font-size: 0.8rem;
+    color: #666;
+    font-weight: normal;
+    margin-left: 10px;
+}
+
 .form-group input,
 .form-group select {
     padding: 15px;
@@ -112,8 +119,15 @@ body {
     position: relative;
 }
 
+.search-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 5px;
+}
+
 .model-search {
-    width: 100%;
+    flex: 1;
     padding: 15px;
     border: 2px solid #e1e5e9;
     border-radius: 12px 12px 0 0;
@@ -123,6 +137,52 @@ body {
     border-bottom: 1px solid #e1e5e9;
 }
 
+.favorites-only-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.85rem;
+    color: #555;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.favorites-only-checkbox:hover {
+    background: rgba(102, 126, 234, 0.1);
+}
+
+.favorites-only-checkbox input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.favorites-filter-btn {
+    background: none;
+    border: 1px solid #e1e5e9;
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.favorites-filter-btn:hover {
+    background: #fff3cd;
+    border-color: #ffd700;
+    color: #856404;
+}
+
+.favorites-filter-btn.active {
+    background: #ffd700;
+    border-color: #ffd700;
+    color: #856404;
+}
+
 .model-search:focus {
     outline: none;
     border-color: #667eea;
@@ -130,9 +190,16 @@ body {
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
+.model-select-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
 .model-select {
     width: 100%;
     padding: 15px;
+    padding-right: 50px; /* Make room for favorite button */
     border: 2px solid #e1e5e9;
     border-radius: 0 0 12px 12px;
     font-size: 1rem;
@@ -148,6 +215,80 @@ body {
     border-color: #667eea;
     background: white;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Favorite Toggle Button */
+.favorite-toggle-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: #ccc;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    z-index: 10;
+}
+
+.favorite-toggle-btn:hover {
+    color: #ffd700;
+    background: rgba(255, 215, 0, 0.1);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.favorite-toggle-btn.favorited {
+    color: #ffd700;
+}
+
+.favorite-toggle-btn.favorited:hover {
+    color: #ffed4e;
+}
+
+/* Animation for favorite toggle */
+.favorite-toggle-btn i {
+    transition: all 0.3s ease;
+}
+
+.favorite-toggle-btn:active {
+    transform: translateY(-50%) scale(0.9);
+}
+
+/* Hover effect for model options */
+.model-select option:hover {
+    background-color: #e3f2fd;
+}
+
+/* Focus styles for accessibility */
+.favorite-toggle-btn:focus {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
+}
+
+/* Favorite Count */
+.favorite-count {
+    background: #fff3cd;
+    color: #856404;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 0.8rem;
+}
+
+/* Model Select Option Styles */
+.model-select option[disabled] {
+    background-color: #f8f9fa;
+    color: #6c757d;
+    font-weight: bold;
+    text-align: center;
+}
+
+.model-select option[style*="background-color: #fff3cd"] {
+    background-color: #fff3cd !important;
+    font-weight: 500;
 }
 
 .model-info {
@@ -189,6 +330,110 @@ body {
 .form-group small a {
     color: #667eea;
     text-decoration: none;
+}
+
+/* Favorites Management Styles */
+.favorites-management {
+    background: #f8f9fa;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 10px;
+}
+
+.favorites-info {
+    margin-bottom: 10px;
+    font-weight: 500;
+    color: #555;
+}
+
+.favorites-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.clear-favorites-btn,
+.export-favorites-btn,
+.import-favorites-btn {
+    padding: 8px 12px;
+    border: 1px solid #e1e5e9;
+    border-radius: 6px;
+    background: white;
+    color: #555;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.clear-favorites-btn:hover {
+    background: #dc3545;
+    color: white;
+    border-color: #dc3545;
+}
+
+.export-favorites-btn:hover {
+    background: #28a745;
+    color: white;
+    border-color: #28a745;
+}
+
+.import-favorites-btn:hover {
+    background: #17a2b8;
+    color: white;
+    border-color: #17a2b8;
+}
+
+/* Notification System */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 15px 20px;
+    z-index: 1000;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    max-width: 300px;
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.notification-success {
+    border-left: 4px solid #28a745;
+}
+
+.notification-success i {
+    color: #28a745;
+}
+
+.notification-info {
+    border-left: 4px solid #17a2b8;
+}
+
+.notification-info i {
+    color: #17a2b8;
+}
+
+.notification-error {
+    border-left: 4px solid #dc3545;
+}
+
+.notification-error i {
+    color: #dc3545;
 }
 
 /* Prompt Select Styles */
