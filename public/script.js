@@ -27,6 +27,7 @@ const videoThumbnail = document.getElementById('videoThumbnail');
 
 // Action buttons
 const downloadBtn = document.getElementById('downloadBtn');
+const downloadPromptBtn = document.getElementById('downloadPromptBtn');
 const previewBtn = document.getElementById('previewBtn');
 const exportBtn = document.getElementById('exportBtn');
 const newAnalysisBtn = document.getElementById('newAnalysisBtn');
@@ -92,6 +93,9 @@ function setupEventListeners() {
     
     // Action buttons
     downloadBtn.addEventListener('click', handleDownload);
+    downloadPromptBtn.addEventListener('click', handleDownloadPrompt);
+    document.getElementById('downloadTranscriptBtn').addEventListener('click', handleDownloadTranscript);
+    document.getElementById('downloadDescriptionBtn').addEventListener('click', handleDownloadDescription);
     previewBtn.addEventListener('click', handlePreview);
     exportBtn.addEventListener('click', handleExportToNotion);
     newAnalysisBtn.addEventListener('click', handleNewAnalysis);
@@ -144,6 +148,7 @@ async function handleFormSubmit(e) {
     const url = youtubeUrlInput.value.trim();
     const model = modelSelect.value;
     const promptId = promptSelect.value;
+    const tokenLimit = parseInt(document.getElementById('tokenLimitSelect').value) || 10000;
     
     if (!url) {
         showError('Please enter a YouTube URL');
@@ -157,7 +162,7 @@ async function handleFormSubmit(e) {
     }
     
     // Start analysis
-    await analyzeVideo(url, model, promptId);
+    await analyzeVideo(url, model, promptId, tokenLimit);
 }
 
 // Validate YouTube URL
@@ -172,7 +177,7 @@ function isValidYouTubeUrl(url) {
 }
 
 // Analyze video
-async function analyzeVideo(url, model, promptId) {
+async function analyzeVideo(url, model, promptId, tokenLimit) {
     try {
         showLoading();
         updateLoadingMessage('Fetching video information...');
@@ -182,7 +187,7 @@ async function analyzeVideo(url, model, promptId) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ url, model, promptId })
+            body: JSON.stringify({ url, model, promptId, tokenLimit })
         });
         
         const data = await response.json();
@@ -191,8 +196,24 @@ async function analyzeVideo(url, model, promptId) {
             throw new Error(data.error || 'Failed to analyze video');
         }
         
+        console.log('Received analysis result:', data);
+        console.log('Transcript available:', !!data.transcript);
+        console.log('Transcript length:', data.transcript ? data.transcript.length : 'null');
+        console.log('Raw description available:', !!data.rawDescription);
+        
         currentResult = data;
         showResult(data);
+        
+        // Show notification based on transcript status
+        if (data.transcriptStatus === 'available') {
+            showNotification('Analysis completed successfully with transcript!', 'success');
+        } else if (data.transcriptStatus === 'api_available_but_extraction_failed') {
+            showNotification('Analysis completed. Captions exist but could not be extracted. Analysis based on video description.', 'warning');
+        } else if (data.transcriptStatus === 'failed') {
+            showNotification('Analysis completed, but no transcript was available for this video. The analysis was based on the video description.', 'info');
+        } else {
+            showNotification('Analysis completed, but no transcript was available for this video. The analysis was based on the video description.', 'info');
+        }
         
     } catch (error) {
         console.error('Analysis error:', error);
@@ -283,6 +304,166 @@ function handleDownload() {
     URL.revokeObjectURL(url);
 }
 
+// Handle download prompt
+async function handleDownloadPrompt() {
+    if (!currentResult) {
+        alert('No analysis result available. Please analyze a video first.');
+        return;
+    }
+
+    try {
+        downloadPromptBtn.disabled = true;
+        downloadPromptBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Getting Prompt...';
+        
+        const url = youtubeUrlInput.value.trim();
+        const promptId = promptSelect.value;
+        const model = modelSelect.value;
+        
+        const response = await fetch('/api/getPrompt', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ url, promptId, model })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to get prompt');
+        }
+        
+        // Create filename based on video title
+        const videoTitle = currentResult.videoInfo.title || 'youtube-video';
+        const sanitizedTitle = videoTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const filename = `prompt_${sanitizedTitle}.json`;
+        
+        // Create and download the JSON file
+        const blob = new Blob([JSON.stringify(data.prompt, null, 2)], { type: 'application/json' });
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+        
+        showNotification('Prompt downloaded successfully!', 'success');
+        
+    } catch (error) {
+        console.error('Download prompt error:', error);
+        showNotification(`Failed to download prompt: ${error.message}`, 'error');
+    } finally {
+        downloadPromptBtn.disabled = false;
+        downloadPromptBtn.innerHTML = '<i class="fas fa-file-code"></i> Download Prompt';
+    }
+}
+
+// Handle download transcript
+function handleDownloadTranscript() {
+    console.log('Download transcript clicked');
+    console.log('Current result:', currentResult);
+    console.log('Transcript available:', !!currentResult?.transcript);
+    console.log('Transcript length:', currentResult?.transcript ? currentResult.transcript.length : 'null');
+    
+    if (!currentResult || !currentResult.transcript) {
+        alert('No transcript available. Please analyze a video first.');
+        return;
+    }
+    
+    // Create filename based on video title
+    const videoTitle = currentResult.videoInfo.title || 'youtube-video';
+    const sanitizedTitle = videoTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const filename = `transcript_${sanitizedTitle}.md`;
+    
+    // Create markdown content with metadata
+    const markdownContent = `# Transcript: ${currentResult.videoInfo.title}
+
+**Channel:** ${currentResult.videoInfo.channelTitle}  
+**Video ID:** ${currentResult.videoInfo.videoId}  
+**URL:** https://youtu.be/${currentResult.videoInfo.videoId}  
+**Published:** ${new Date(currentResult.videoInfo.publishedAt).toLocaleDateString('en-AU', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+})}
+
+---
+
+${currentResult.transcript}
+
+---
+
+*This transcript was extracted directly from YouTube using the YouTube Data API.*
+`;
+    
+    // Create and download the file
+    const blob = new Blob([markdownContent], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showNotification('Transcript downloaded successfully!', 'success');
+}
+
+// Handle download description
+function handleDownloadDescription() {
+    console.log('Download description clicked');
+    console.log('Current result:', currentResult);
+    console.log('Raw description available:', !!currentResult?.rawDescription);
+    console.log('Raw description length:', currentResult?.rawDescription ? currentResult.rawDescription.length : 'null');
+    
+    if (!currentResult || !currentResult.rawDescription) {
+        alert('No video description available. Please analyze a video first.');
+        return;
+    }
+    
+    // Create filename based on video title
+    const videoTitle = currentResult.videoInfo.title || 'youtube-video';
+    const sanitizedTitle = videoTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const filename = `description_${sanitizedTitle}.md`;
+    
+    // Create markdown content with metadata
+    const markdownContent = `# Video Description: ${currentResult.videoInfo.title}
+
+**Channel:** ${currentResult.videoInfo.channelTitle}  
+**Video ID:** ${currentResult.videoInfo.videoId}  
+**URL:** https://youtu.be/${currentResult.videoInfo.videoId}  
+**Published:** ${new Date(currentResult.videoInfo.publishedAt).toLocaleDateString('en-AU', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+})}
+
+---
+
+${currentResult.rawDescription}
+
+---
+
+*This description was extracted directly from YouTube using the YouTube Data API.*
+`;
+    
+    // Create and download the file
+    const blob = new Blob([markdownContent], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showNotification('Video description downloaded successfully!', 'success');
+}
+
 // Handle preview
 function handlePreview() {
     if (!currentResult) return;
@@ -307,7 +488,8 @@ function handleNewAnalysis() {
 // Handle retry
 function handleRetry() {
     if (currentResult) {
-        analyzeVideo(youtubeUrlInput.value, modelSelect.value, promptSelect.value);
+        const tokenLimit = parseInt(document.getElementById('tokenLimitSelect').value) || 10000;
+        analyzeVideo(youtubeUrlInput.value, modelSelect.value, promptSelect.value, tokenLimit);
     } else {
         handleNewAnalysis();
     }

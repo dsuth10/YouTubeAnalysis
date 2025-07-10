@@ -622,6 +622,9 @@ body {
 }
 
 .download-btn,
+.download-prompt-btn,
+.download-transcript-btn,
+.download-description-btn,
 .preview-btn,
 .export-btn,
 .new-analysis-btn {
@@ -645,6 +648,36 @@ body {
 
 .download-btn:hover {
     background: #218838;
+    transform: translateY(-1px);
+}
+
+.download-prompt-btn {
+    background: #6f42c1;
+    color: white;
+}
+
+.download-prompt-btn:hover {
+    background: #5a32a3;
+    transform: translateY(-1px);
+}
+
+.download-transcript-btn {
+    background: #fd7e14;
+    color: white;
+}
+
+.download-transcript-btn:hover {
+    background: #e8690b;
+    transform: translateY(-1px);
+}
+
+.download-description-btn {
+    background: #20c997;
+    color: white;
+}
+
+.download-description-btn:hover {
+    background: #1ba37e;
     transform: translateY(-1px);
 }
 

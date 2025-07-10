@@ -3,6 +3,7 @@ const cors = require('cors');
 const axios = require('axios');
 const { YoutubeTranscript } = require('youtube-transcript');
 const { Client } = require('@notionhq/client');
+const getSubtitles = require('youtube-captions-scraper').getSubtitles;
 const fs = require('fs').promises;
 const path = require('path');
 require('dotenv').config();
@@ -182,16 +183,96 @@ async function getVideoMetadata(videoId) {
 // Get video transcript
 async function getVideoTranscript(videoId) {
     try {
-        const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-        return transcript.map(item => item.text).join(' ');
+        console.log(`Fetching transcript for video ID: ${videoId}`);
+        
+        // Try multiple approaches to get transcript
+        let transcript = null;
+        let error = null;
+        
+        // Method 1: Try default fetch
+        try {
+            transcript = await YoutubeTranscript.fetchTranscript(videoId);
+            console.log('Method 1 (default) succeeded');
+        } catch (err) {
+            console.log('Method 1 failed:', err.message);
+            error = err;
+        }
+        
+        // Method 2: Try with English language specification
+        if (!transcript) {
+            try {
+                transcript = await YoutubeTranscript.fetchTranscript(videoId, { lang: 'en' });
+                console.log('Method 2 (English) succeeded');
+            } catch (err) {
+                console.log('Method 2 failed:', err.message);
+                error = err;
+            }
+        }
+        
+        // Method 3: Try with different language codes
+        if (!transcript) {
+            const languageCodes = ['en-US', 'en-GB', 'en-CA', 'en-AU'];
+            for (const langCode of languageCodes) {
+                try {
+                    transcript = await YoutubeTranscript.fetchTranscript(videoId, { lang: langCode });
+                    console.log(`Method 3 (${langCode}) succeeded`);
+                    break;
+                } catch (err) {
+                    console.log(`Method 3 (${langCode}) failed:`, err.message);
+                    error = err;
+                }
+            }
+        }
+        
+        // Method 4: Fallback to youtube-captions-scraper
+        if (!transcript) {
+            try {
+                console.log('Trying fallback method with youtube-captions-scraper...');
+                const subtitles = await getSubtitles({
+                    videoID: videoId,
+                    lang: 'en'
+                });
+                
+                if (subtitles && subtitles.length > 0) {
+                    transcript = subtitles.map(item => ({
+                        text: item.text,
+                        start: item.start,
+                        duration: item.duration
+                    }));
+                    console.log('Method 4 (fallback scraper) succeeded');
+                }
+            } catch (err) {
+                console.log('Method 4 failed:', err.message);
+                error = err;
+            }
+        }
+        
+        if (!transcript || transcript.length === 0) {
+            console.log('All methods failed - no transcript data found');
+            throw new Error(`No transcript data found for this video. Last error: ${error ? error.message : 'Unknown'}`);
+        }
+        
+        console.log(`Transcript fetched successfully. Found ${transcript.length} segments.`);
+        console.log('First few segments:', transcript.slice(0, 3));
+        
+        const fullTranscript = transcript.map(item => item.text).join(' ');
+        console.log(`Full transcript length: ${fullTranscript.length} characters`);
+        console.log('First 200 characters:', fullTranscript.substring(0, 200));
+        
+        if (fullTranscript.trim().length === 0) {
+            throw new Error('Transcript is empty after processing.');
+        }
+        
+        return fullTranscript;
     } catch (error) {
         console.error('Error fetching transcript:', error.message);
-        throw new Error('Could not fetch transcript. The video may not have captions enabled.');
+        console.error('Full error:', error);
+        throw new Error(`Could not fetch transcript: ${error.message}`);
     }
 }
 
 // Analyze content with OpenRouter API
-async function analyzeContent(transcript, videoInfo, model, promptId = null) {
+async function analyzeContent(transcript, videoInfo, model, promptId = null, tokenLimit = 10000) {
     try {
         const apiKey = process.env.OPENROUTER_API_KEY;
         if (!apiKey) {
@@ -241,8 +322,8 @@ Format your response in clean markdown with proper headings and bullet points. F
         }
 
         // Replace placeholders in the prompt
-        const descSnippet = videoInfo.description.length > 500
-            ? videoInfo.description.substring(0, 500) + '...'
+        const descSnippet = (transcript && transcript.length > 0)
+            ? (videoInfo.description.length > 500 ? videoInfo.description.substring(0, 500) + '...' : videoInfo.description)
             : videoInfo.description;
 
         const processedPrompt = promptContent
@@ -263,7 +344,7 @@ Format your response in clean markdown with proper headings and bullet points. F
                     content: processedPrompt
                 }
             ],
-            max_tokens: 2000,
+            max_tokens: tokenLimit,
             temperature: 0.3
         }, {
             headers: {
@@ -328,7 +409,7 @@ Output only the title (5–10 words):`;
 }
 
 // Generate markdown content
-function generateMarkdown(videoInfo, analysis, generatedTitle) {
+function generateMarkdown(videoInfo, analysis, generatedTitle, hasTranscript = false) {
     const publishDate = new Date(videoInfo.publishedAt).toLocaleDateString('en-AU', {
         year: 'numeric',
         month: 'long',
@@ -361,7 +442,7 @@ ${analysis}
 
 ---
 
-*This summary was generated using AI analysis of the video transcript.*
+*This summary was generated using AI analysis of the video ${hasTranscript ? 'transcript' : 'description (no transcript available)'}.*
 `;
 
     return markdown;
@@ -370,7 +451,7 @@ ${analysis}
 // Main endpoint for processing videos
 app.post('/api/process', async (req, res) => {
     try {
-        const { url, model, promptId } = req.body;
+        const { url, model, promptId, tokenLimit } = req.body;
         
         if (!url) {
             return res.status(400).json({ error: 'YouTube URL is required' });
@@ -387,10 +468,53 @@ app.post('/api/process', async (req, res) => {
         videoInfo.videoId = videoId;
 
         // Get transcript
-        const transcript = await getVideoTranscript(videoId);
+        let transcript;
+        let transcriptStatus = 'not_available';
+        
+        try {
+            transcript = await getVideoTranscript(videoId);
+            console.log(`Transcript received in main process. Length: ${transcript ? transcript.length : 'null'} characters`);
+            if (transcript && transcript.length > 0) {
+                transcriptStatus = 'available';
+            }
+        } catch (transcriptError) {
+            console.log('Transcript extraction failed, proceeding without transcript');
+            console.log('Transcript error details:', transcriptError.message);
+            transcript = '';
+            transcriptStatus = 'failed';
+        }
+        
+        // Check if captions exist via YouTube API
+        try {
+            const apiKey = process.env.YOUTUBE_API_KEY;
+            if (apiKey) {
+                const captionsResponse = await axios.get('https://www.googleapis.com/youtube/v3/captions', {
+                    params: {
+                        part: 'snippet',
+                        videoId: videoId,
+                        key: apiKey
+                    }
+                });
+                
+                if (captionsResponse.data.items && captionsResponse.data.items.length > 0) {
+                    const englishCaptions = captionsResponse.data.items.filter(caption => 
+                        caption.snippet.language === 'en'
+                    );
+                    
+                    if (englishCaptions.length > 0) {
+                        console.log(`YouTube API shows ${englishCaptions.length} English caption tracks available`);
+                        if (transcriptStatus === 'failed') {
+                            transcriptStatus = 'api_available_but_extraction_failed';
+                        }
+                    }
+                }
+            }
+        } catch (apiError) {
+            console.log('Could not check caption availability via YouTube API:', apiError.message);
+        }
 
-        // Analyze content with selected prompt
-        const analysis = await analyzeContent(transcript, videoInfo, model || 'openai/gpt-3.5-turbo', promptId);
+        // Analyze content with selected prompt and token limit
+        const analysis = await analyzeContent(transcript, videoInfo, model || 'openai/gpt-3.5-turbo', promptId, tokenLimit);
 
         // Generate title
         const title = await generateTitle(transcript, videoInfo, model || 'openai/gpt-3.5-turbo');
@@ -400,7 +524,7 @@ app.post('/api/process', async (req, res) => {
         videoInfo.generatedTitle = title;
 
         // Generate markdown
-        const markdown = generateMarkdown(videoInfo, analysis, title);
+        const markdown = generateMarkdown(videoInfo, analysis, title, !!transcript);
 
         // Create filename
         const filename = `${sanitizeFilename(title)}_${Date.now()}.md`;
@@ -416,13 +540,21 @@ app.post('/api/process', async (req, res) => {
         const filePath = path.join(outputDir, filename);
         await fs.writeFile(filePath, markdown, 'utf8');
 
-        res.json({
+        const responseData = {
             success: true,
             filename: filename,
             filePath: filePath,
             markdown: markdown,
-            videoInfo: videoInfo
-        });
+            videoInfo: videoInfo,
+            transcript: transcript,
+            rawDescription: videoInfo.description,
+            transcriptStatus: transcriptStatus
+        };
+        
+        console.log(`Sending response with transcript length: ${transcript ? transcript.length : 'null'} characters`);
+        console.log(`Response data keys: ${Object.keys(responseData)}`);
+        
+        res.json(responseData);
 
     } catch (error) {
         console.error('Error processing video:', error);
@@ -1183,7 +1315,124 @@ app.post('/api/saveToNotion', async (req, res) => {
     }
 });
 
+// Get processed prompt endpoint
+app.post('/api/getPrompt', async (req, res) => {
+    try {
+        const { url, promptId, model } = req.body;
+        
+        if (!url) {
+            return res.status(400).json({ error: 'YouTube URL is required' });
+        }
 
+        // Extract video ID
+        const videoId = extractVideoId(url);
+        if (!videoId) {
+            return res.status(400).json({ error: 'Invalid YouTube URL' });
+        }
+
+        // Get video metadata
+        const videoInfo = await getVideoMetadata(videoId);
+        videoInfo.videoId = videoId;
+
+        // Get transcript
+        const transcript = await getVideoTranscript(videoId);
+
+        // Get prompt content
+        let promptContent;
+        
+        if (promptId) {
+            // Load custom prompt
+            const prompts = await getPrompts();
+            const selectedPrompt = prompts.find(p => p.id === promptId);
+            
+            if (!selectedPrompt) {
+                throw new Error(`Prompt with ID '${promptId}' not found`);
+            }
+            
+            promptContent = selectedPrompt.content;
+        } else {
+            // Use default prompt
+            promptContent = `You are an assistant that extracts key information from YouTube video transcripts. 
+
+Video Title: {{title}}
+Channel: {{channel}}
+Description: {{description}}
+
+Transcript: {{transcript}}
+
+Please analyze this video and provide a comprehensive summary in the following format:
+
+## Topics Covered
+- List the main topics and subjects discussed in the video
+
+## Key Workflows/Processes
+- Describe any step-by-step processes, workflows, or procedures mentioned
+
+## Important Concepts
+- Define and explain key concepts, terms, or ideas presented
+
+## Learnings/Takeaways
+- List the main insights, lessons, or actionable takeaways
+
+## Suggested Tags
+- Provide 5-10 relevant tags for categorizing this content
+
+Format your response in clean markdown with proper headings and bullet points. Focus on extracting the most valuable and actionable information from the video.`;
+        }
+
+        // Replace placeholders in the prompt
+        const descSnippet = (transcript && transcript.length > 0)
+            ? (videoInfo.description.length > 500 ? videoInfo.description.substring(0, 500) + '...' : videoInfo.description)
+            : videoInfo.description;
+
+        const processedPrompt = promptContent
+            .replace(/\{\{title\}\}/g, videoInfo.title)
+            .replace(/\{\{channel\}\}/g, videoInfo.channelTitle)
+            .replace(/\{\{description\}\}/g, descSnippet)
+            .replace(/\{\{transcript\}\}/g, transcript);
+
+        // Create the complete API request that would be sent to OpenRouter
+        const apiRequest = {
+            model: model || 'openai/gpt-3.5-turbo', // Use selected model or default
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a helpful assistant that creates comprehensive, well-structured summaries of YouTube video content. Always format your responses in clean markdown.'
+                },
+                {
+                    role: 'user',
+                    content: processedPrompt
+                }
+            ],
+            max_tokens: 10000,
+            temperature: 0.3
+        };
+
+        res.json({
+            success: true,
+            prompt: {
+                original: promptContent,
+                processed: processedPrompt,
+                apiRequest: apiRequest,
+                videoInfo: {
+                    title: videoInfo.title,
+                    channelTitle: videoInfo.channelTitle,
+                    description: descSnippet,
+                    videoId: videoInfo.videoId,
+                    publishedAt: videoInfo.publishedAt,
+                    viewCount: videoInfo.viewCount,
+                    likeCount: videoInfo.likeCount
+                },
+                transcriptLength: transcript.length,
+                promptId: promptId || 'default'
+            }
+        });
+
+    } catch (error) {
+        console.error('Error getting prompt:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 app.listen(PORT, () => {
     console.log(`🚀 YouTube Analysis App running on http://localhost:${PORT}`);
