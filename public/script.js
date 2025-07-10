@@ -48,6 +48,19 @@ const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
 const closeHelpModalBtn = document.getElementById('closeHelpModalBtn');
 
+// Download modal elements
+const downloadModal = document.getElementById('downloadModal');
+const closeDownloadBtn = document.getElementById('closeDownloadBtn');
+const cancelDownloadBtn = document.getElementById('cancelDownloadBtn');
+const downloadFilename = document.getElementById('downloadFilename');
+const downloadFolderPath = document.getElementById('downloadFolderPath');
+const browseFolderBtn = document.getElementById('browseFolderBtn');
+const folderInput = document.getElementById('folderInput');
+const favoriteFoldersList = document.getElementById('favoriteFoldersList');
+const addCurrentToFavoritesBtn = document.getElementById('addCurrentToFavoritesBtn');
+const commonDirectoriesList = document.getElementById('commonDirectoriesList');
+const saveMarkdownBtn = document.getElementById('saveMarkdownBtn');
+
 // API Keys
 const youtubeApiKeyInput = document.getElementById('youtubeApiKey');
 const openrouterApiKeyInput = document.getElementById('openrouterApiKey');
@@ -109,6 +122,17 @@ function setupEventListeners() {
     cancelSettingsBtn.addEventListener('click', closeSettings);
     closeHelpModalBtn.addEventListener('click', closeHelp);
     
+    // Download modal controls
+    closeDownloadBtn.addEventListener('click', hideDownloadModal);
+    cancelDownloadBtn.addEventListener('click', hideDownloadModal);
+    // Remove browse folder and file input logic
+    // Only allow manual entry, quick access, and favorites for folder selection
+    // (No code needed for folderInput or handleFolderSelection)
+    downloadFolderPath.addEventListener('input', validateDownloadForm);
+    downloadFilename.addEventListener('input', validateDownloadForm);
+    addCurrentToFavoritesBtn.addEventListener('click', addCurrentFolderToFavorites);
+    saveMarkdownBtn.addEventListener('click', saveMarkdownToFolder);
+    
     // Favorites management
     clearFavoritesBtn.addEventListener('click', clearAllFavorites);
     exportFavoritesBtn.addEventListener('click', exportFavorites);
@@ -119,6 +143,7 @@ function setupEventListeners() {
     window.addEventListener('click', function(event) {
         if (event.target === settingsModal) closeSettings();
         if (event.target === helpModal) closeHelp();
+        if (event.target === downloadModal) hideDownloadModal();
     });
     
     // Keyboard shortcuts
@@ -268,19 +293,22 @@ function hideAllSections() {
     previewSection.classList.add('hidden');
 }
 
-// Handle download
+// Handle download - show modal instead of direct download
 function handleDownload() {
     if (!currentResult) return;
     
-    const blob = new Blob([currentResult.markdown], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = currentResult.filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Set default filename
+    downloadFilename.value = currentResult.filename.replace('.md', '');
+    
+    // Clear previous selections
+    downloadFolderPath.value = '';
+    clearFolderSelections();
+    
+    // Load favorites and common directories
+    loadDownloadModalData();
+    
+    // Show modal
+    showDownloadModal();
 }
 
 // Handle preview
@@ -1152,7 +1180,7 @@ function showNotification(message, type = 'info') {
     notification.className = `notification notification-${type}`;
     notification.innerHTML = `
         <div class="notification-content">
-            <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'}"></i>
+            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i>
             <span>${message}</span>
         </div>
     `;
@@ -1174,4 +1202,306 @@ function showNotification(message, type = 'info') {
             }
         }, 300);
     }, 3000);
+}
+
+// Download Modal Functions
+
+// Show download modal
+function showDownloadModal() {
+    downloadModal.classList.remove('hidden');
+    // Prefill last used folder if available
+    const lastFolder = localStorage.getItem('lastUsedFolder');
+    if (lastFolder) {
+        downloadFolderPath.value = lastFolder;
+    }
+    downloadFilename.focus();
+}
+
+// Hide download modal
+function hideDownloadModal() {
+    downloadModal.classList.add('hidden');
+    clearFolderSelections();
+}
+
+// Load download modal data (favorites and common directories)
+async function loadDownloadModalData() {
+    try {
+        const response = await fetch('/api/folders/browse');
+        const data = await response.json();
+        
+        if (data.success) {
+            populateFavoriteFolders(data.favoriteFolders);
+            populateCommonDirectories(data.commonDirectories);
+        }
+    } catch (error) {
+        console.error('Error loading download modal data:', error);
+        showNotification('Failed to load folder data', 'error');
+    }
+}
+
+// Populate favorite folders list
+function populateFavoriteFolders(favorites) {
+    favoriteFoldersList.innerHTML = '';
+    
+    if (favorites.length === 0) {
+        favoriteFoldersList.innerHTML = `
+            <div class="empty-favorites">
+                <i class="fas fa-star"></i>
+                <p>No favorite folders yet</p>
+                <small>Add folders to favorites for quick access</small>
+            </div>
+        `;
+        return;
+    }
+    
+    favorites.forEach(folderPath => {
+        const folderName = folderPath.split(/[/\\]/).pop() || folderPath;
+        const item = document.createElement('div');
+        item.className = 'favorite-folder-item';
+        item.dataset.path = folderPath;
+        item.innerHTML = `
+            <div class="folder-info" onclick="selectFavoriteFolder('${folderPath}')">
+                <i class="fas fa-folder"></i>
+                <div>
+                    <div class="folder-name">${folderName}</div>
+                    <div class="folder-path">${folderPath}</div>
+                </div>
+            </div>
+            <button class="remove-favorite" onclick="removeFavoriteFolder('${folderPath}')" title="Remove from favorites">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        favoriteFoldersList.appendChild(item);
+    });
+}
+
+// Populate common directories list
+function populateCommonDirectories(directories) {
+    commonDirectoriesList.innerHTML = '';
+    
+    directories.forEach(dirPath => {
+        const dirName = dirPath.split(/[/\\]/).pop() || dirPath;
+        const item = document.createElement('div');
+        item.className = 'common-directory-item';
+        item.dataset.path = dirPath;
+        item.innerHTML = `
+            <i class="fas fa-folder"></i>
+            <div>
+                <div class="folder-name">${dirName}</div>
+                <div class="folder-path">${dirPath}</div>
+            </div>
+        `;
+        item.addEventListener('click', () => selectCommonDirectory(dirPath));
+        commonDirectoriesList.appendChild(item);
+    });
+}
+
+// Select favorite folder
+function selectFavoriteFolder(folderPath) {
+    downloadFolderPath.value = folderPath;
+    clearFolderSelections();
+    
+    // Highlight selected favorite
+    const items = favoriteFoldersList.querySelectorAll('.favorite-folder-item');
+    items.forEach(item => {
+        if (item.dataset.path === folderPath) {
+            item.classList.add('selected');
+        }
+    });
+    
+    validateDownloadForm();
+}
+
+// Select common directory
+function selectCommonDirectory(dirPath) {
+    downloadFolderPath.value = dirPath;
+    clearFolderSelections();
+    
+    // Highlight selected common directory
+    const items = commonDirectoriesList.querySelectorAll('.common-directory-item');
+    items.forEach(item => {
+        if (item.dataset.path === dirPath) {
+            item.classList.add('selected');
+        }
+    });
+    
+    validateDownloadForm();
+}
+
+// Clear folder selections
+function clearFolderSelections() {
+    favoriteFoldersList.querySelectorAll('.favorite-folder-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+    commonDirectoriesList.querySelectorAll('.common-directory-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+}
+
+// Remove favorite folder
+async function removeFavoriteFolder(folderPath) {
+    try {
+        const response = await fetch('/api/folders/favorites', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ folderPath })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Folder removed from favorites', 'success');
+            // Reload favorites list
+            loadDownloadModalData();
+        } else {
+            showNotification(data.error || 'Failed to remove folder from favorites', 'error');
+        }
+    } catch (error) {
+        console.error('Error removing favorite folder:', error);
+        showNotification('Failed to remove folder from favorites', 'error');
+    }
+}
+
+// Add current folder to favorites
+async function addCurrentFolderToFavorites() {
+    const folderPath = downloadFolderPath.value.trim();
+    if (!folderPath) return;
+    // Validate folder accessibility before adding
+    try {
+        const checkResponse = await fetch('/api/folders/browse');
+        const checkData = await checkResponse.json();
+        const allDirs = [...(checkData.commonDirectories || []), ...(checkData.favoriteFolders || [])];
+        if (!allDirs.includes(folderPath)) {
+            showNotification('Folder does not exist or is not accessible', 'error');
+            return;
+        }
+    } catch (error) {
+        showNotification('Failed to validate folder', 'error');
+        return;
+    }
+    try {
+        const response = await fetch('/api/folders/favorites', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ folderPath })
+        });
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            showNotification('Unexpected server response. Please check the server logs.', 'error');
+            return;
+        }
+        if (!response.ok) {
+            showNotification(data.error || 'Failed to add folder to favorites (server error)', 'error');
+            return;
+        }
+        if (data.success) {
+            showNotification('Folder added to favorites', 'success');
+            // Reload favorites list
+            loadDownloadModalData();
+        } else {
+            showNotification(data.error || 'Failed to add folder to favorites', 'error');
+        }
+    } catch (error) {
+        console.error('Error adding favorite folder:', error);
+        showNotification('Failed to add folder to favorites: ' + (error.message || error), 'error');
+    }
+}
+
+// Save markdown to folder
+async function saveMarkdownToFolder(overwrite = false) {
+    if (!currentResult) {
+        showNotification('No analysis result to save', 'error');
+        return;
+    }
+    
+    const filename = downloadFilename.value.trim();
+    const folderPath = downloadFolderPath.value.trim();
+    
+    if (!filename || !folderPath) {
+        showNotification('Please enter both filename and folder path', 'error');
+        return;
+    }
+    // Save last used folder
+    localStorage.setItem('lastUsedFolder', folderPath);
+    
+    try {
+        saveMarkdownBtn.disabled = true;
+        saveMarkdownBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        
+        const response = await fetch('/api/download/save', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                content: currentResult.markdown,
+                filename: filename.endsWith('.md') ? filename : `${filename}.md`,
+                folderPath: folderPath,
+                overwrite: overwrite
+            })
+        });
+        
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            showNotification('Unexpected server response. Please check the server logs.', 'error');
+            return;
+        }
+        
+        if (!response.ok) {
+            showNotification(data.error || 'Failed to save file (server error)', 'error');
+            return;
+        }
+        
+        if (response.status === 409 && data.needsConfirmation) {
+            if (confirm('A file with this name already exists. Overwrite?')) {
+                await saveMarkdownToFolder(true);
+                return;
+            } else {
+                showNotification('File not saved (overwrite cancelled)', 'info');
+                return;
+            }
+        }
+        
+        if (data.success) {
+            showNotification(data.message, 'success');
+            hideDownloadModal();
+        } else {
+            showNotification(data.error || 'Failed to save file', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving markdown:', error);
+        showNotification('Failed to save file: ' + (error.message || error), 'error');
+    } finally {
+        saveMarkdownBtn.disabled = false;
+        saveMarkdownBtn.innerHTML = '<i class="fas fa-save"></i> Save File';
+    }
+} 
+
+// Keyboard navigation for download modal
+if (downloadModal) {
+    downloadModal.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            hideDownloadModal();
+        } else if (event.key === 'Enter') {
+            if (!saveMarkdownBtn.disabled) {
+                saveMarkdownToFolder();
+            }
+        }
+    });
+} 
+
+function validateDownloadForm() {
+    const filename = downloadFilename.value ? downloadFilename.value.trim() : '';
+    const folderPath = downloadFolderPath.value ? downloadFolderPath.value.trim() : '';
+    const isValid = filename.length > 0 && folderPath.length > 0;
+    if (typeof saveMarkdownBtn !== 'undefined') saveMarkdownBtn.disabled = !isValid;
+    if (typeof addCurrentToFavoritesBtn !== 'undefined') addCurrentToFavoritesBtn.disabled = !folderPath.length > 0;
 } 

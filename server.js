@@ -5,6 +5,7 @@ const { YoutubeTranscript } = require('youtube-transcript');
 const { Client } = require('@notionhq/client');
 const fs = require('fs').promises;
 const path = require('path');
+const fileSystem = require('./utils/fileSystem');
 require('dotenv').config();
 
 // Global variable to cache prompts
@@ -1170,7 +1171,115 @@ app.post('/api/saveToNotion', async (req, res) => {
     }
 });
 
+// File System API Endpoints
 
+// Get favorite folders
+app.get('/api/folders/favorites', async (req, res) => {
+    try {
+        const favorites = await fileSystem.getFavoriteFolders();
+        res.json({ success: true, favorites });
+    } catch (error) {
+        console.error('Error getting favorite folders:', error);
+        res.status(500).json({ error: 'Failed to get favorite folders' });
+    }
+});
+
+// Add favorite folder
+app.post('/api/folders/favorites', async (req, res) => {
+    try {
+        const { folderPath } = req.body;
+        if (!folderPath) {
+            return res.status(400).json({ error: 'Folder path is required' });
+        }
+        try {
+            const favorites = await fileSystem.addFavoriteFolder(folderPath);
+            res.json({ success: true, favorites, message: 'Folder added to favorites' });
+        } catch (error) {
+            console.error('[AddFavoriteFolder] Path:', folderPath, '| Error:', error.message);
+            res.status(400).json({ error: error.message });
+        }
+    } catch (error) {
+        console.error('[AddFavoriteFolder] Unexpected error:', error);
+        res.status(500).json({ error: 'Unexpected server error' });
+    }
+});
+
+// Remove favorite folder
+app.delete('/api/folders/favorites', async (req, res) => {
+    try {
+        const { folderPath } = req.body;
+        
+        if (!folderPath) {
+            return res.status(400).json({ error: 'Folder path is required' });
+        }
+        
+        const favorites = await fileSystem.removeFavoriteFolder(folderPath);
+        res.json({ success: true, favorites, message: 'Folder removed from favorites' });
+    } catch (error) {
+        console.error('Error removing favorite folder:', error);
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Browse available directories
+app.get('/api/folders/browse', async (req, res) => {
+    try {
+        const commonDirs = fileSystem.getCommonDirectories();
+        const favorites = await fileSystem.getFavoriteFolders();
+        
+        // Check which favorites are still accessible
+        const accessibleFavorites = [];
+        for (const favorite of favorites) {
+            const isAccessible = await fileSystem.isPathAccessible(favorite);
+            if (isAccessible) {
+                accessibleFavorites.push(favorite);
+            }
+        }
+        
+        res.json({
+            success: true,
+            commonDirectories: commonDirs,
+            favoriteFolders: accessibleFavorites
+        });
+    } catch (error) {
+        console.error('Error browsing directories:', error);
+        res.status(500).json({ error: 'Failed to browse directories' });
+    }
+});
+
+// Save markdown to folder
+app.post('/api/download/save', async (req, res) => {
+    try {
+        const { content, filename, folderPath, overwrite } = req.body;
+        
+        if (!content || !filename || !folderPath) {
+            return res.status(400).json({ 
+                error: 'Missing required fields: content, filename, or folderPath' 
+            });
+        }
+        
+        const result = await fileSystem.saveMarkdownToFolder(content, filename, folderPath, !!overwrite);
+        if (result.needsConfirmation) {
+            return res.status(409).json({
+                success: false,
+                fileExists: true,
+                message: result.message,
+                filePath: result.filePath,
+                filename: result.filename,
+                needsConfirmation: true
+            });
+        }
+        res.json({
+            success: true,
+            message: result.message,
+            filePath: result.filePath,
+            filename: result.filename
+        });
+    } catch (error) {
+        console.error('Error saving markdown:', error);
+        res.status(400).json({ error: error.message });
+    }
+});
 
 app.listen(PORT, () => {
     console.log(`🚀 YouTube Analysis App running on http://localhost:${PORT}`);

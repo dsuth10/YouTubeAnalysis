@@ -7,19 +7,26 @@
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
-  "keywords": ["youtube", "analysis", "markdown", "notion", "ai"],
+  "keywords": [
+    "youtube",
+    "analysis",
+    "markdown",
+    "notion",
+    "ai"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
+    "@notionhq/client": "^2.2.14",
     "axios": "^1.6.0",
-    "youtube-transcript": "^1.0.6",
+    "cors": "^2.8.5",
     "dotenv": "^16.3.1",
+    "express": "^4.18.2",
     "multer": "^1.4.5-lts.1",
-    "@notionhq/client": "^2.2.14"
+    "node-fetch": "^2.7.0",
+    "youtube-transcript": "^1.0.6"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   }
-} 
+}
