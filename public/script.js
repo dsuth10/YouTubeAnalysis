@@ -266,7 +266,7 @@ function handleNewAnalysis() {
 // Handle retry
 function handleRetry() {
     if (currentResult) {
-        analyzeVideo(youtubeUrlInput.value, modelSelect.value);
+        analyzeVideo(youtubeUrlInput.value, modelSelect.value, promptSelect.value);
     } else {
         handleNewAnalysis();
     }
@@ -325,9 +325,13 @@ async function loadModels() {
     try {
         const response = await fetch('/api/models');
         const data = await response.json();
-        
-        // Store all models globally
-        allModels = data.models;
+
+        // Store all models globally, fallback to empty array on error
+        if (response.ok && Array.isArray(data.models)) {
+            allModels = data.models;
+        } else {
+            allModels = [];
+        }
         
         // Populate the select with all models
         populateModelSelect(allModels);
