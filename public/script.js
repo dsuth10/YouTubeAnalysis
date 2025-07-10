@@ -364,7 +364,9 @@ async function loadModels() {
         const response = await fetch('/api/models');
         const data = await response.json();
 
-        
+        // Store models globally
+        allModels = Array.isArray(data.models) ? data.models : [];
+
         // Populate the select with all models
         populateModelSelect(allModels);
         
@@ -405,10 +407,10 @@ function populateModelSelect(models) {
     modelSelect.innerHTML = '';
     
     // Add favorites section if there are favorites
-    const favoriteModels = models.filter(model => model.isFavorite);
+    const favoriteList = models.filter(model => model.isFavorite);
     const nonFavoriteModels = models.filter(model => !model.isFavorite);
-    
-    if (favoriteModels.length > 0) {
+
+    if (favoriteList.length > 0) {
         // Add favorites section header
         const favoritesHeader = document.createElement('option');
         favoritesHeader.disabled = true;
@@ -416,9 +418,9 @@ function populateModelSelect(models) {
         favoritesHeader.style.fontWeight = 'bold';
         favoritesHeader.style.backgroundColor = '#f8f9fa';
         modelSelect.appendChild(favoritesHeader);
-        
+
         // Add favorite models
-        favoriteModels.forEach(model => {
+        favoriteList.forEach(model => {
             const option = document.createElement('option');
             option.value = model.id;
             option.textContent = `★ ${model.name} (${model.provider})`;
@@ -1059,8 +1061,8 @@ function updateFavoriteCount() {
 function updateModelStats() {
     if (modelStats && allModels.length > 0) {
         const totalModels = allModels.length;
-        const favoriteCount = favoriteModels.length;
-        modelStats.textContent = `(${totalModels} models, ${favoriteCount} favorite${favoriteCount !== 1 ? 's' : ''})`;
+        const favoritesTotal = favoriteModels.length;
+        modelStats.textContent = `(${totalModels} models, ${favoritesTotal} favorite${favoritesTotal !== 1 ? 's' : ''})`;
     }
 }
 

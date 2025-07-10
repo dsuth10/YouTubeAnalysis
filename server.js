@@ -241,10 +241,14 @@ Format your response in clean markdown with proper headings and bullet points. F
         }
 
         // Replace placeholders in the prompt
+        const descSnippet = videoInfo.description.length > 500
+            ? videoInfo.description.substring(0, 500) + '...'
+            : videoInfo.description;
+
         const processedPrompt = promptContent
             .replace(/\{\{title\}\}/g, videoInfo.title)
             .replace(/\{\{channel\}\}/g, videoInfo.channelTitle)
-            .replace(/\{\{description\}\}/g, videoInfo.description.substring(0, 500) + '...')
+            .replace(/\{\{description\}\}/g, descSnippet)
             .replace(/\{\{transcript\}\}/g, transcript);
 
         const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
@@ -847,7 +851,16 @@ function createChildPageBlocks(videoInfo, markdown) {
 
 // Parse markdown to Notion blocks
 function parseMarkdownToNotionBlocks(markdown) {
-    const lines = markdown.split('\n');
+    let lines = markdown.split('\n');
+    // Remove YAML front matter if present
+    if (lines[0].trim() === '---') {
+        let end = 1;
+        while (end < lines.length && lines[end].trim() !== '---') {
+            end++;
+        }
+        lines = lines.slice(end + 1);
+    }
+    
     const blocks = [];
     let currentList = null;
     let currentListType = null;
