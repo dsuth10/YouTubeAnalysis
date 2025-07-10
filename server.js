@@ -340,16 +340,16 @@ title: "${generatedTitle}"
 url: "https://youtu.be/${videoInfo.videoId}"
 channel: "${videoInfo.channelTitle}"
 published: "${publishDate}"
-views: ${videoInfo.viewCount}
-likes: ${videoInfo.likeCount}
+views: ${videoInfo.viewCount || 0}
+likes: ${videoInfo.likeCount || 0}
 ---
 
 # ${generatedTitle} (YouTube Summary)
 
 **Channel:** ${videoInfo.channelTitle}  
 **Published:** ${publishDate}  
-**Views:** ${parseInt(videoInfo.viewCount).toLocaleString()}  
-**Likes:** ${parseInt(videoInfo.likeCount).toLocaleString()}  
+**Views:** ${videoInfo.viewCount ? parseInt(videoInfo.viewCount).toLocaleString() : 'N/A'}
+**Likes:** ${videoInfo.likeCount ? parseInt(videoInfo.likeCount).toLocaleString() : 'N/A'}
 **URL:** [https://youtu.be/${videoInfo.videoId}](https://youtu.be/${videoInfo.videoId})
 
 ## Original YouTube Description
@@ -762,7 +762,7 @@ function createChildPageBlocks(videoInfo, markdown) {
         paragraph: {
             rich_text: [
                 { type: 'text', text: { content: 'Views: ' }, annotations: { bold: true } },
-                { type: 'text', text: { content: parseInt(videoInfo.viewCount).toLocaleString() } }
+                { type: 'text', text: { content: videoInfo.viewCount ? parseInt(videoInfo.viewCount).toLocaleString() : 'N/A' } }
             ]
         }
     });
@@ -772,7 +772,7 @@ function createChildPageBlocks(videoInfo, markdown) {
         paragraph: {
             rich_text: [
                 { type: 'text', text: { content: 'Likes: ' }, annotations: { bold: true } },
-                { type: 'text', text: { content: parseInt(videoInfo.likeCount).toLocaleString() } }
+                { type: 'text', text: { content: videoInfo.likeCount ? parseInt(videoInfo.likeCount).toLocaleString() : 'N/A' } }
             ]
         }
     });
