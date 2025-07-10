@@ -3,6 +3,7 @@ const cors = require('cors');
 const axios = require('axios');
 const { YoutubeTranscript } = require('youtube-transcript');
 const { Client } = require('@notionhq/client');
+const { ApifyClient } = require('apify-client');
 const getSubtitles = require('youtube-captions-scraper').getSubtitles;
 const fs = require('fs').promises;
 const path = require('path');
@@ -42,6 +43,84 @@ function extractVideoId(url) {
 // Utility function to sanitize filename
 function sanitizeFilename(filename) {
     return filename.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+}
+
+// Get transcript from Apify YouTube Transcript Scraper
+async function getTranscriptFromApify(videoId) {
+    if (!process.env.APIFY_API_KEY) {
+        throw new Error('Apify API key not configured');
+    }
+
+    console.log(`Attempting to get transcript via Apify for video: ${videoId}`);
+    
+    const client = new ApifyClient({
+        token: process.env.APIFY_API_KEY,
+    });
+
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    
+    try {
+        // Configure the actor run
+        const runInput = {
+            start_urls: [{ url: videoUrl }]
+        };
+
+        console.log('Starting Apify actor run...');
+        
+        // Run the actor and wait for completion
+        const run = await client.actor('scrapingxpert/youtube-video-to-transcript').call(runInput);
+        
+        console.log(`Apify actor run completed with ID: ${run.id}`);
+        
+        // Fetch results from the dataset
+        const { items } = await client.dataset(run.defaultDatasetId).listItems();
+        
+        if (items && items.length > 0) {
+            // Extract transcript from the first item
+            const transcriptData = items[0];
+            
+            if (transcriptData.transcript && transcriptData.transcript.length > 0) {
+                // Handle different transcript formats
+                let fullTranscript = '';
+                
+                if (Array.isArray(transcriptData.transcript)) {
+                    // If transcript is an array of objects with text property
+                    fullTranscript = transcriptData.transcript
+                        .map(item => item.text || item)
+                        .join(' ');
+                } else if (typeof transcriptData.transcript === 'string') {
+                    // If transcript is already a string
+                    fullTranscript = transcriptData.transcript;
+                }
+                
+                console.log(`Apify transcript extracted successfully (${fullTranscript.length} characters)`);
+                return fullTranscript.trim();
+            }
+        }
+        
+        throw new Error('No transcript data found in Apify response');
+        
+    } catch (error) {
+        console.error('Apify transcript extraction failed:', error.message);
+        throw error;
+    }
+}
+
+// Enhanced error handling for Apify
+function handleApifyError(error, videoId) {
+    console.error(`Apify transcript extraction failed for video ${videoId}:`, error.message);
+    
+    if (error.message.includes('Actor not found')) {
+        console.error('Apify actor not found - check actor ID');
+    } else if (error.message.includes('insufficient funds')) {
+        console.error('Apify account has insufficient funds');
+    } else if (error.message.includes('rate limit')) {
+        console.error('Apify rate limit exceeded');
+    } else if (error.message.includes('timeout')) {
+        console.error('Apify actor run timed out');
+    }
+    
+    return null;
 }
 
 // Load and cache prompts from the prompts directory
@@ -243,6 +322,20 @@ async function getVideoTranscript(videoId) {
                 }
             } catch (err) {
                 console.log('Method 4 failed:', err.message);
+                error = err;
+            }
+        }
+        
+        // Method 5: Apify Actor Fallback
+        if (!transcript) {
+            try {
+                console.log('Method 5: Trying Apify YouTube Transcript Scraper...');
+                transcript = await getTranscriptFromApify(videoId);
+                if (transcript) {
+                    console.log('Method 5 (Apify) succeeded');
+                }
+            } catch (err) {
+                console.log('Method 5 (Apify) failed:', err.message);
                 error = err;
             }
         }
@@ -599,6 +692,7 @@ app.get('/api/health', async (req, res) => {
             youtubeApi: !!process.env.YOUTUBE_API_KEY,
             openrouterApi: !!process.env.OPENROUTER_API_KEY,
             notionApi: !!process.env.NOTION_TOKEN,
+            apifyApi: !!process.env.APIFY_API_KEY,
             prompts: prompts.length,
             timestamp: new Date().toISOString()
         });
