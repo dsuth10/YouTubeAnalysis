@@ -367,14 +367,8 @@ async function loadModels() {
         // Store models globally
         allModels = Array.isArray(data.models) ? data.models : [];
 
-        // Populate the select with all models
-        populateModelSelect(allModels);
-        
-        // Set default selection and update info
-        if (allModels.length > 0) {
-            modelSelect.value = allModels[0].id;
-            updateModelInfo();
-        }
+        // Update model display with favorites applied
+        updateModelDisplay();
         
         // Update model statistics
         updateModelStats();
@@ -948,6 +942,11 @@ function saveFavorites() {
 function toggleFavorite(modelId) {
     const index = favoriteModels.indexOf(modelId);
     const model = allModels.find(m => m.id === modelId);
+    
+    if (!model) {
+        console.error('Model not found:', modelId);
+        return;
+    }
     
     if (index > -1) {
         // Remove from favorites

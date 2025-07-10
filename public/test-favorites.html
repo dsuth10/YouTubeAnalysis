@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Favorites Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 15px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-danger { background-color: #dc3545; color: white; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Favorites Functionality Test</h1>
+    
+    <div class="test-section">
+        <h3>1. Test localStorage Access</h3>
+        <button onclick="testLocalStorage()" class="btn-primary">Test localStorage</button>
+        <div id="localStorageResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. Test Favorites Functions</h3>
+        <button onclick="testFavoritesFunctions()" class="btn-primary">Test Favorites Functions</button>
+        <div id="favoritesResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. Test Model Data</h3>
+        <button onclick="testModelData()" class="btn-primary">Test Model Data</button>
+        <div id="modelResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>4. Manual Favorites Test</h3>
+        <button onclick="addTestFavorite()" class="btn-success">Add Test Favorite</button>
+        <button onclick="removeTestFavorite()" class="btn-danger">Remove Test Favorite</button>
+        <button onclick="clearAllFavorites()" class="btn-danger">Clear All Favorites</button>
+        <div id="manualResult"></div>
+    </div>
+
+    <script>
+        // Test localStorage access
+        function testLocalStorage() {
+            const result = document.getElementById('localStorageResult');
+            try {
+                localStorage.setItem('test', 'test-value');
+                const testValue = localStorage.getItem('test');
+                localStorage.removeItem('test');
+                
+                if (testValue === 'test-value') {
+                    result.innerHTML = '<div class="success">✅ localStorage is working correctly</div>';
+                } else {
+                    result.innerHTML = '<div class="error">❌ localStorage test failed</div>';
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ localStorage error: ${error.message}</div>`;
+            }
+        }
+        
+        // Test favorites functions
+        function testFavoritesFunctions() {
+            const result = document.getElementById('favoritesResult');
+            try {
+                // Test data
+                const testFavorites = ['openai/gpt-4', 'anthropic/claude-2'];
+                
+                // Test save
+                localStorage.setItem('youtubeAnalysisFavorites', JSON.stringify(testFavorites));
+                
+                // Test load
+                const stored = localStorage.getItem('youtubeAnalysisFavorites');
+                const loaded = JSON.parse(stored);
+                
+                if (Array.isArray(loaded) && loaded.length === 2) {
+                    result.innerHTML = '<div class="success">✅ Favorites save/load functions work correctly</div>';
+                } else {
+                    result.innerHTML = '<div class="error">❌ Favorites save/load test failed</div>';
+                }
+                
+                // Clean up
+                localStorage.removeItem('youtubeAnalysisFavorites');
+                
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Favorites test error: ${error.message}</div>`;
+            }
+        }
+        
+        // Test model data
+        async function testModelData() {
+            const result = document.getElementById('modelResult');
+            try {
+                const response = await fetch('/api/models');
+                const data = await response.json();
+                
+                if (data.models && Array.isArray(data.models) && data.models.length > 0) {
+                    result.innerHTML = `<div class="success">✅ Models API working correctly (${data.models.length} models)</div>
+                                      <pre>${JSON.stringify(data.models.slice(0, 3), null, 2)}</pre>`;
+                } else {
+                    result.innerHTML = '<div class="error">❌ Models API returned invalid data</div>';
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Models API error: ${error.message}</div>`;
+            }
+        }
+        
+        // Manual favorites test
+        function addTestFavorite() {
+            const result = document.getElementById('manualResult');
+            try {
+                const currentFavorites = JSON.parse(localStorage.getItem('youtubeAnalysisFavorites') || '[]');
+                if (!currentFavorites.includes('openai/gpt-4')) {
+                    currentFavorites.push('openai/gpt-4');
+                    localStorage.setItem('youtubeAnalysisFavorites', JSON.stringify(currentFavorites));
+                    result.innerHTML = '<div class="success">✅ Added openai/gpt-4 to favorites</div>';
+                } else {
+                    result.innerHTML = '<div class="success">ℹ️ openai/gpt-4 already in favorites</div>';
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Error adding favorite: ${error.message}</div>`;
+            }
+        }
+        
+        function removeTestFavorite() {
+            const result = document.getElementById('manualResult');
+            try {
+                const currentFavorites = JSON.parse(localStorage.getItem('youtubeAnalysisFavorites') || '[]');
+                const index = currentFavorites.indexOf('openai/gpt-4');
+                if (index > -1) {
+                    currentFavorites.splice(index, 1);
+                    localStorage.setItem('youtubeAnalysisFavorites', JSON.stringify(currentFavorites));
+                    result.innerHTML = '<div class="success">✅ Removed openai/gpt-4 from favorites</div>';
+                } else {
+                    result.innerHTML = '<div class="success">ℹ️ openai/gpt-4 not in favorites</div>';
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Error removing favorite: ${error.message}</div>`;
+            }
+        }
+        
+        function clearAllFavorites() {
+            const result = document.getElementById('manualResult');
+            try {
+                localStorage.removeItem('youtubeAnalysisFavorites');
+                result.innerHTML = '<div class="success">✅ Cleared all favorites</div>';
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Error clearing favorites: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html> 
