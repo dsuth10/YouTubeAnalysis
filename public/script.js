@@ -307,7 +307,7 @@ function handleNewAnalysis() {
 // Handle retry
 function handleRetry() {
     if (currentResult) {
-        analyzeVideo(youtubeUrlInput.value, modelSelect.value);
+        analyzeVideo(youtubeUrlInput.value, modelSelect.value, promptSelect.value);
     } else {
         handleNewAnalysis();
     }
@@ -363,19 +363,7 @@ async function loadModels() {
     try {
         const response = await fetch('/api/models');
         const data = await response.json();
-        
-        // Store all models globally and add favorite status
-        allModels = data.models.map(model => ({
-            ...model,
-            isFavorite: isFavorite(model.id)
-        }));
-        
-        // Sort models: favorites first, then alphabetically
-        allModels.sort((a, b) => {
-            if (a.isFavorite && !b.isFavorite) return -1;
-            if (!a.isFavorite && b.isFavorite) return 1;
-            return a.name.localeCompare(b.name);
-        });
+
         
         // Populate the select with all models
         populateModelSelect(allModels);
