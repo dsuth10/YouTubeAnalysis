@@ -4,27 +4,38 @@ A powerful web application that analyzes YouTube videos and generates comprehens
 
 ## ✨ Features
 
-- 🎥 **YouTube Video Analysis**: Extract metadata and transcripts from any YouTube video
-- 🤖 **AI-Powered Insights**: Generate comprehensive summaries using OpenRouter's AI models
+- 🎥 **YouTube Video Analysis**: Extract metadata, transcripts, and descriptions from any YouTube video
+- 🤖 **AI-Powered Insights**: Generate comprehensive summaries using OpenRouter's AI models (GPT-3.5, GPT-4, Claude, and more)
 - 🎯 **Custom Analysis Prompts**: Choose specialized templates for different video types (tutorials, reviews, lectures, etc.)
-- 📝 **Notion-Ready Markdown**: Export beautifully formatted markdown files for Notion
+- 📝 **Multiple Export Options**: Download analysis reports, raw transcripts, video descriptions, and processed prompts
 - 🔗 **Advanced Notion Integration**: Save notes directly to your Notion databases with structured content
 - 🏗️ **Two-Tier Notion Structure**: Creates main database entries with linked child pages for detailed analysis
-- 🎨 **Modern UI**: Clean, responsive interface with beautiful animations
-- ⚡ **Fast & Efficient**: Optimized for quick analysis and processing
-- 🔧 **Configurable**: Support for multiple AI models and API configurations
+- 🎨 **Modern UI**: Clean, responsive interface with beautiful animations and real-time feedback
+- ⚡ **Fast & Efficient**: Optimized for quick analysis and processing with fallback mechanisms
+- 🔧 **Configurable**: Support for multiple AI models, token limits, and API configurations
 - 📊 **Health Monitoring**: Real-time API status and configuration validation
+- 🎯 **Robust Transcript Handling**: Multiple extraction methods with graceful fallback to description-based analysis
+- 📱 **Enhanced User Experience**: Detailed status notifications, progress tracking, and error handling
 
 ## 🎯 What You Get
 
-For each YouTube video, the app generates a markdown report containing:
+For each YouTube video, the app generates a comprehensive markdown report containing:
 
-- **Video Metadata**: Title, channel, publish date, views, likes
-- **Topics Covered**: Main subjects and themes discussed
-- **Key Workflows**: Step-by-step processes and procedures
-- **Important Concepts**: Definitions and explanations of key terms
-- **Learnings/Takeaways**: Actionable insights and lessons
+- **Video Metadata**: Title, channel, publish date, views, likes, and direct video link
+- **Video Overview**: Brief summary of the video content
+- **Topics Covered**: Main subjects and themes discussed or likely covered
+- **Key Information Extracted**: Important facts, data, and key points presented
+- **Important Concepts**: Definitions and explanations of key terms and ideas
+- **Learnings/Takeaways**: Actionable insights and lessons from the content
+- **Content Analysis**: Content type, target audience, and quality indicators
 - **Suggested Tags**: Relevant categories for organization
+- **Analysis Limitations**: Notes about what additional insights might be available
+
+### 📥 Download Options
+- **Analysis Report**: Complete AI-generated summary in markdown format
+- **Raw Transcript**: Original transcript extracted from YouTube (when available)
+- **Video Description**: Full video description as provided by the creator
+- **Processed Prompt**: The exact prompt sent to the AI for analysis
 
 ## 🚀 Quick Start
 
@@ -119,23 +130,37 @@ For direct Notion integration:
 1. **Enter YouTube URL**: Paste any YouTube video URL in the input field
 2. **Select AI Model**: Choose from available models (GPT-3.5 is fastest and cheapest)
 3. **Choose Analysis Prompt**: Select a specialized template for your video type
-4. **Analyze**: Click "Analyze Video" to start the process
-5. **Review Results**: View the generated analysis and video information
-6. **Download**: Save the markdown file to your computer
-7. **Save to Notion**: Use the direct Notion integration to save notes to your database
+4. **Set Token Limit**: Configure analysis depth (2,000 to 20,000 tokens)
+5. **Analyze**: Click "Analyze Video" to start the process
+6. **Review Results**: View the generated analysis and video information
+7. **Download Options**: 
+   - Download the complete analysis report
+   - Download raw transcript (if available)
+   - Download video description
+   - Download the processed prompt
+8. **Save to Notion**: Use the direct Notion integration to save notes to your database
 
 ### Custom Analysis Prompts
 
 The app includes specialized analysis templates for different video types:
 
-- **Default Analysis**: General-purpose analysis for any video type
+- **Default Analysis**: Enhanced general-purpose analysis that works with or without transcripts
 - **Hardware Review Video**: Specialized for tech hardware reviews
 - **Instructional Video**: Focused on educational content
 - **Long-Form Discussion Video**: For podcasts and panel discussions
 - **News Report Video**: For news and current events
+- **SaaS Multiple Review**: For videos reviewing multiple software products
 - **Scientific Lecture Video**: For academic and scientific content
 - **Software Review Video**: Specialized for software reviews
 - **Tutorial Video**: For step-by-step tutorials
+
+### Transcript Handling
+
+The app uses multiple methods to extract transcripts:
+- **Primary**: youtube-transcript package with multiple language attempts
+- **Fallback**: youtube-captions-scraper package
+- **Verification**: YouTube Data API to check caption availability
+- **Graceful Degradation**: Full analysis using video description when transcripts aren't available
 
 ### Supported URL Formats
 
@@ -145,10 +170,19 @@ The app includes specialized analysis templates for different video types:
 
 ### AI Models Available
 
-- **GPT-3.5 Turbo**: Fast, cheap, good for most content
-- **GPT-4**: More accurate, better for complex topics
-- **Claude 2**: Balanced performance and cost
+- **GPT-3.5 Turbo**: Fast, cheap, good for most content (~$0.002 per 1K tokens)
+- **GPT-4**: More accurate, better for complex topics (~$0.03 per 1K tokens)
+- **Claude 2**: Balanced performance and cost (~$0.008 per 1K tokens)
+- **Gemini 2.5 Flash**: Google's latest model for comprehensive analysis
 - **And many more** via OpenRouter's model marketplace
+
+### Token Limits
+
+Configure analysis depth with token limits:
+- **2,000 tokens**: Fast, concise analysis
+- **4,000 tokens**: Balanced detail
+- **6,000-10,000 tokens**: Detailed analysis (recommended)
+- **15,000-20,000 tokens**: Maximum detail for complex content
 
 ## 🏗️ Advanced Notion Integration
 
@@ -184,39 +218,43 @@ Your Notion database must have these properties:
 
 ```
 youtube-analysis-app/
-├── server.js              # Main Node.js server
+├── server.js              # Main Node.js server with enhanced transcript handling
 ├── package.json           # Dependencies and scripts
 ├── env.example           # Environment variables template
 ├── .env                  # Your API keys (create this)
 ├── public/               # Frontend files
-│   ├── index.html        # Main HTML interface
-│   ├── styles.css        # CSS styles
-│   └── script.js         # Frontend JavaScript
+│   ├── index.html        # Main HTML interface with download options
+│   ├── styles.css        # CSS styles with modern UI
+│   └── script.js         # Frontend JavaScript with enhanced UX
 ├── prompts/              # Custom analysis prompts
 │   ├── Default Analysis.md
 │   ├── Hardware Review Video.md
 │   ├── Instructional Video.md
 │   ├── Long-Form Discussion Video.md
 │   ├── News Report Video.md
+│   ├── SaaS Multiple Review.md
 │   ├── Scientific Lecture Video.md
 │   ├── Software Review Video.md
 │   └── Tutorial Video.md
 ├── output/               # Generated markdown files
+├── Debug Examples/       # Debug and testing files
 ├── NOTION_SETUP.md       # Detailed Notion integration guide
 ├── NOTION_CHILD_PAGE_IMPLEMENTATION.md # Technical implementation details
 ├── CUSTOM_PROMPT_IMPLEMENTATION.md # Custom prompt feature details
 ├── IMPLEMENTATION_SUMMARY.md # Complete feature summary
+├── FAVORITES_IMPLEMENTATION_SUMMARY.md # Model favorites feature
 └── README.md            # This file
 ```
 
 ## 🔌 API Endpoints
 
-- `POST /api/process` - Process a YouTube video with custom prompts
-- `GET /api/models` - Get available AI models
+- `POST /api/process` - Process a YouTube video with enhanced transcript handling
+- `GET /api/models` - Get available AI models with favorites support
 - `GET /api/prompts` - Get available analysis prompts
 - `POST /api/prompts/reload` - Reload prompts from disk (development)
 - `GET /api/health` - Check server and API status
 - `GET /api/download/:filename` - Download generated files
+- `POST /api/getPrompt` - Get processed prompt for debugging
 - `GET /api/notion/databases` - Get available Notion databases
 - `POST /api/notion/saveNote` - Save note to Notion database
 - `POST /api/saveToNotion` - Export analysis to Notion
@@ -256,8 +294,8 @@ Transcript: {{transcript}}
 The following placeholders are automatically replaced:
 - `{{title}}` - Video title
 - `{{channel}}` - Channel name
-- `{{description}}` - Video description (truncated to 500 chars)
-- `{{transcript}}` - Full video transcript
+- `{{description}}` - Video description (full description when no transcript, truncated when transcript available)
+- `{{transcript}}` - Full video transcript or "No transcript available"
 
 ## 🔧 Troubleshooting
 
@@ -275,8 +313,9 @@ The following placeholders are automatically replaced:
 
 **"Could not fetch transcript"**
 - Some videos don't have captions enabled
-- Try a different video with captions
-- Check if the video is publicly accessible
+- The app will automatically fall back to description-based analysis
+- Check the status notifications for transcript availability
+- Videos with captions may still fail due to YouTube API restrictions
 
 **"Invalid YouTube URL"**
 - Ensure the URL is in a supported format
@@ -295,6 +334,8 @@ The following placeholders are automatically replaced:
 - For longer videos, the analysis may take more time
 - Consider the transcript length when choosing models (longer transcripts cost more)
 - Custom prompts can be optimized for specific content types
+- The app automatically handles transcript extraction failures gracefully
+- Use higher token limits for more detailed analysis when needed
 
 ## 💰 Cost Analysis
 
@@ -326,6 +367,16 @@ npm run dev
 
 This uses nodemon for automatic server restarts during development.
 
+### Tech Stack
+
+- **Backend**: Node.js with Express.js
+- **Frontend**: Vanilla JavaScript (ES6+) with modern CSS
+- **AI Integration**: OpenRouter API for multiple AI models
+- **YouTube Integration**: YouTube Data API v3
+- **Transcript Extraction**: youtube-transcript + youtube-captions-scraper
+- **Notion Integration**: Notion API with two-tier database structure
+- **Styling**: CSS Grid, Flexbox, and modern animations
+
 ### Adding New Features
 
 The app is built with a modular architecture:
@@ -335,6 +386,8 @@ The app is built with a modular architecture:
 - **Styling**: CSS with responsive design and animations
 - **Prompts**: Markdown-based template system
 - **Notion Integration**: Advanced two-tier database structure
+- **Transcript Handling**: Multi-method extraction with fallback mechanisms
+- **Download System**: Multiple export options for different use cases
 
 ### Extending Functionality
 
@@ -344,6 +397,8 @@ You can easily extend the app by:
 2. **Creating custom prompts**: Add `.md` files to the `prompts/` directory
 3. **Customizing Notion structure**: Modify the database schema and block generation
 4. **Adding export formats**: Create new export functions
+5. **Enhancing transcript extraction**: Add new transcript extraction methods
+6. **Adding new download options**: Extend the download system
 
 ## 📚 Documentation
 
@@ -383,6 +438,10 @@ Future enhancements planned:
 - [x] Custom prompt templates
 - [x] Two-tier Notion structure with child pages
 - [x] Advanced health monitoring
+- [x] Enhanced transcript handling with fallback mechanisms
+- [x] Multiple download options (transcript, description, prompt)
+- [x] Robust error handling and user feedback
+- [x] Model favorites and search functionality
 - [ ] Batch processing for multiple videos
 - [ ] Export to other formats (PDF, Word)
 - [ ] Video thumbnail generation
@@ -391,6 +450,7 @@ Future enhancements planned:
 - [ ] Mobile app version
 - [ ] Prompt management UI
 - [ ] Advanced Notion formatting options
+- [ ] Manual transcript upload feature
 
 ---
 
