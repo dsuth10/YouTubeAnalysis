@@ -152,7 +152,7 @@ async function getVideoMetadata(videoId) {
 
         const response = await axios.get(`https://www.googleapis.com/youtube/v3/videos`, {
             params: {
-                part: 'snippet,statistics',
+                part: 'snippet,statistics,contentDetails',
                 id: videoId,
                 key: apiKey
             }
@@ -170,7 +170,7 @@ async function getVideoMetadata(videoId) {
             description: video.snippet.description,
             viewCount: video.statistics.viewCount,
             likeCount: video.statistics.likeCount,
-            duration: video.snippet.duration,
+            duration: video.contentDetails.duration,
             tags: video.snippet.tags || []
         };
     } catch (error) {
@@ -286,7 +286,7 @@ async function generateTitle(transcript, videoInfo, model) {
         const titlePrompt = `You are an AI assistant that creates concise instructional titles for YouTube videos.
 
 Video Title: ${videoInfo.title}
-Video Description: ${videoInfo.description.substring(0, 500)}...
+Video Description: ${videoInfo.description.length > 500 ? videoInfo.description.substring(0, 500) + '...' : videoInfo.description}
 Transcript: ${transcript}
 
 Task: Write a concise 5–10 word instructional title summarizing the main focus of this video. The title should clearly instruct or convey the key action or topic of the content.
