@@ -5,6 +5,7 @@ const { YoutubeTranscript } = require('youtube-transcript');
 const { Client } = require('@notionhq/client');
 const { ApifyClient } = require('apify-client');
 const getSubtitles = require('youtube-captions-scraper').getSubtitles;
+const { execFile } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 require('dotenv').config();
@@ -43,6 +44,35 @@ function extractVideoId(url) {
 // Utility function to sanitize filename
 function sanitizeFilename(filename) {
     return filename.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+}
+
+// Get transcript using python youtube-transcript-api
+function getTranscriptViaPython(videoId) {
+    return new Promise((resolve, reject) => {
+        const scriptPath = path.join(__dirname, 'scripts', 'get_transcript.py');
+        execFile('python3', [scriptPath, videoId], { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+            if (error) {
+                return reject(error);
+            }
+            const output = stdout.trim();
+            if (!output) {
+                return reject(new Error('No output from python script'));
+            }
+            try {
+                const data = JSON.parse(output);
+                if (Array.isArray(data)) {
+                    resolve(data.map(item => ({ text: item.text, start: item.start, duration: item.duration })));
+                } else if (data.error) {
+                    reject(new Error(data.error));
+                } else {
+                    reject(new Error('Unexpected output format'));
+                }
+            } catch (e) {
+                // If output isn't JSON assume it's plain text
+                resolve(output.split('\n').map(line => ({ text: line })));
+            }
+        });
+    });
 }
 
 // Get transcript from Apify YouTube Transcript Scraper
@@ -263,11 +293,22 @@ async function getVideoMetadata(videoId) {
 async function getVideoTranscript(videoId) {
     try {
         console.log(`Fetching transcript for video ID: ${videoId}`);
-        
+
         // Try multiple approaches to get transcript
         let transcript = null;
         let error = null;
-        
+
+        // Method 0: python youtube-transcript-api
+        try {
+            transcript = await getTranscriptViaPython(videoId);
+            if (transcript) {
+                console.log('Method 0 (python youtube-transcript-api) succeeded');
+            }
+        } catch (err) {
+            console.log('Method 0 failed:', err.message);
+            error = err;
+        }
+
         // Method 1: Try default fetch
         try {
             transcript = await YoutubeTranscript.fetchTranscript(videoId);
