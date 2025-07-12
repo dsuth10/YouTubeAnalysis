@@ -60,17 +60,17 @@ async function getTranscriptFromApify(videoId) {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     
     try {
-        // Configure the actor run
+        // Configure the task run
         const runInput = {
             start_urls: [{ url: videoUrl }]
         };
 
-        console.log('Starting Apify actor run...');
+        console.log('Starting Apify task run...');
         
-        // Run the actor and wait for completion
-        const run = await client.actor('scrapingxpert/youtube-video-to-transcript').call(runInput);
+        // Run the task and wait for completion
+        const run = await client.task('dsuth10~test-youtube-structured-transcript-extractor-task').call(runInput);
         
-        console.log(`Apify actor run completed with ID: ${run.id}`);
+        console.log(`Apify task run completed with ID: ${run.id}`);
         
         // Fetch results from the dataset
         const { items } = await client.dataset(run.defaultDatasetId).listItems();
@@ -110,14 +110,14 @@ async function getTranscriptFromApify(videoId) {
 function handleApifyError(error, videoId) {
     console.error(`Apify transcript extraction failed for video ${videoId}:`, error.message);
     
-    if (error.message.includes('Actor not found')) {
-        console.error('Apify actor not found - check actor ID');
+    if (error.message.includes('Task not found')) {
+        console.error('Apify task not found - check task ID');
     } else if (error.message.includes('insufficient funds')) {
         console.error('Apify account has insufficient funds');
     } else if (error.message.includes('rate limit')) {
         console.error('Apify rate limit exceeded');
     } else if (error.message.includes('timeout')) {
-        console.error('Apify actor run timed out');
+        console.error('Apify task run timed out');
     }
     
     return null;

@@ -16,17 +16,17 @@ async function getTranscriptFromApify(videoId) {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     
     try {
-        // Configure the actor run
+        // Configure the task run
         const runInput = {
             start_urls: [{ url: videoUrl }]
         };
 
-        console.log('Starting Apify actor run...');
+        console.log('Starting Apify task run...');
         
-        // Run the actor and wait for completion
-        const run = await client.actor('scrapingxpert/youtube-video-to-transcript').call(runInput);
+        // Run the task and wait for completion
+        const run = await client.task('dsuth10~test-youtube-structured-transcript-extractor-task').call(runInput);
         
-        console.log(`Apify actor run completed with ID: ${run.id}`);
+        console.log(`Apify task run completed with ID: ${run.id}`);
         
         // Fetch results from the dataset
         const { items } = await client.dataset(run.defaultDatasetId).listItems();

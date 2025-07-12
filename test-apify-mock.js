@@ -8,11 +8,11 @@ class MockApifyClient {
         console.log('Mock ApifyClient initialized with token:', this.token ? 'Present' : 'Missing');
     }
     
-    actor(actorId) {
-        console.log(`Mock actor called with ID: ${actorId}`);
+    task(taskId) {
+        console.log(`Mock task called with ID: ${taskId}`);
         return {
             call: async (runInput) => {
-                console.log('Mock actor run input:', runInput);
+                console.log('Mock task run input:', runInput);
                 
                 // Simulate successful response
                 return {
@@ -80,12 +80,12 @@ async function testApifyIntegrationWithMock() {
             const videoUrl = `https://www.youtube.com/watch?v=${testCase.id}`;
             const runInput = { start_urls: [{ url: videoUrl }] };
             
-            console.log('Starting mock Apify actor run...');
+            console.log('Starting mock Apify task run...');
             
-            // Run the actor and wait for completion
-            const run = await client.actor('scrapingxpert/youtube-video-to-transcript').call(runInput);
+            // Run the task and wait for completion
+            const run = await client.task('dsuth10~test-youtube-structured-transcript-extractor-task').call(runInput);
             
-            console.log(`Mock Apify actor run completed with ID: ${run.id}`);
+            console.log(`Mock Apify task run completed with ID: ${run.id}`);
             
             // Fetch results from the dataset
             const { items } = await client.dataset(run.defaultDatasetId).listItems();
@@ -143,7 +143,7 @@ async function testApifyIntegrationWithMock() {
     console.log('\n=== Integration Logic Validation ===');
     console.log('✅ API key validation logic works');
     console.log('✅ ApifyClient initialization works');
-    console.log('✅ Actor run configuration works');
+    console.log('✅ Task run configuration works');
     console.log('✅ Dataset retrieval works');
     console.log('✅ Transcript format handling works');
     console.log('✅ Error handling structure is in place');
