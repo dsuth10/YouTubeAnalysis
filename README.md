@@ -57,6 +57,7 @@ For each YouTube video, the app generates a comprehensive markdown report contai
 2. **Install dependencies**
    ```bash
    npm install
+   pip install youtube-transcript-api
    ```
 
 3. **Configure API keys**
@@ -156,8 +157,9 @@ The app includes specialized analysis templates for different video types:
 
 ### Transcript Handling
 
-The app uses multiple methods to extract transcripts:
-- **Primary**: youtube-transcript package with multiple language attempts
+- The app uses multiple methods to extract transcripts:
+- **Primary**: python `youtube-transcript-api` via a helper script with multi-language attempts
+- **Secondary**: youtube-transcript package
 - **Fallback**: youtube-captions-scraper package
 - **Verification**: YouTube Data API to check caption availability
 - **Graceful Degradation**: Full analysis using video description when transcripts aren't available
