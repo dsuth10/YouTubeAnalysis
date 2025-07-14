@@ -149,6 +149,7 @@ async function handleFormSubmit(e) {
     const model = modelSelect.value;
     const promptId = promptSelect.value;
     const tokenLimit = parseInt(document.getElementById('tokenLimitSelect').value) || 10000;
+    const manualTranscript = document.getElementById('manualTranscriptInput') ? document.getElementById('manualTranscriptInput').value.trim() : '';
     
     if (!url) {
         showError('Please enter a YouTube URL');
@@ -162,7 +163,7 @@ async function handleFormSubmit(e) {
     }
     
     // Start analysis
-    await analyzeVideo(url, model, promptId, tokenLimit);
+    await analyzeVideo(url, model, promptId, tokenLimit, manualTranscript);
 }
 
 // Validate YouTube URL
@@ -177,7 +178,7 @@ function isValidYouTubeUrl(url) {
 }
 
 // Analyze video
-async function analyzeVideo(url, model, promptId, tokenLimit) {
+async function analyzeVideo(url, model, promptId, tokenLimit, manualTranscript) {
     try {
         showLoading();
         updateLoadingMessage('Fetching video information...');
@@ -187,7 +188,7 @@ async function analyzeVideo(url, model, promptId, tokenLimit) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ url, model, promptId, tokenLimit })
+            body: JSON.stringify({ url, model, promptId, tokenLimit, manualTranscript })
         });
         
         const data = await response.json();

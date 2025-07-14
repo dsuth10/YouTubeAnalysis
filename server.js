@@ -10,6 +10,8 @@ const fs = require('fs').promises;
 const path = require('path');
 require('dotenv').config();
 
+// NOTE: Ensure the correct Python executable is used for transcript extraction. If you have multiple Python installations, update the execFile call in getTranscriptViaPython to use the full path if needed.
+
 // Global variable to cache prompts
 let cachedPrompts = null;
 
@@ -50,7 +52,18 @@ function sanitizeFilename(filename) {
 function getTranscriptViaPython(videoId) {
     return new Promise((resolve, reject) => {
         const scriptPath = path.join(__dirname, 'scripts', 'get_transcript.py');
-        execFile('python3', [scriptPath, videoId], { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+        // Log the Python version and executable path for debugging
+        const { execSync } = require('child_process');
+        try {
+            const pythonVersion = execSync('python --version').toString().trim();
+            const pythonPath = execSync('where python').toString().trim();
+            console.log('Python version:', pythonVersion);
+            console.log('Python path:', pythonPath);
+        } catch (e) {
+            console.log('Could not determine Python version or path:', e.message);
+        }
+        // Use 'python' instead of 'python3' for better Windows compatibility
+        execFile('python', [scriptPath, videoId], { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
             if (error) {
                 return reject(error);
             }
@@ -289,6 +302,39 @@ async function getVideoMetadata(videoId) {
     }
 }
 
+// Helper to download captions from YouTube Data API (SRT format)
+async function downloadYoutubeCaption(captionId, apiKey) {
+    try {
+        const url = `https://www.googleapis.com/youtube/v3/captions/${captionId}`;
+        const response = await axios.get(url, {
+            params: {
+                key: apiKey,
+                tfmt: 'srt'
+            },
+            headers: {
+                'Accept': 'application/json'
+            },
+            responseType: 'text'
+        });
+        return response.data;
+    } catch (error) {
+        throw new Error('Failed to download captions: ' + error.message);
+    }
+}
+
+// Helper to parse SRT to plain text
+function parseSrtToText(srt) {
+    return srt
+        .split('\n\n')
+        .map(block => {
+            const lines = block.split('\n');
+            // Remove index and timecode lines
+            return lines.slice(2).join(' ');
+        })
+        .filter(Boolean)
+        .join(' ');
+}
+
 // Get video transcript
 async function getVideoTranscript(videoId) {
     try {
@@ -377,6 +423,36 @@ async function getVideoTranscript(videoId) {
                 }
             } catch (err) {
                 console.log('Method 5 (Apify) failed:', err.message);
+                error = err;
+            }
+        }
+        // Fallback: Download captions using YouTube Data API if available
+        if (!transcript) {
+            try {
+                const apiKey = process.env.YOUTUBE_API_KEY;
+                if (apiKey) {
+                    const captionsResponse = await axios.get('https://www.googleapis.com/youtube/v3/captions', {
+                        params: {
+                            part: 'snippet',
+                            videoId: videoId,
+                            key: apiKey
+                        }
+                    });
+                    if (captionsResponse.data.items && captionsResponse.data.items.length > 0) {
+                        const englishCaptions = captionsResponse.data.items.filter(caption => caption.snippet.language === 'en');
+                        if (englishCaptions.length > 0) {
+                            const captionId = englishCaptions[0].id;
+                            console.log(`Attempting to download caption track: ${captionId}`);
+                            const srt = await downloadYoutubeCaption(captionId, apiKey);
+                            transcript = parseSrtToText(srt);
+                            if (transcript && transcript.trim().length > 0) {
+                                console.log('Fallback YouTube Data API caption download succeeded');
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.log('Fallback YouTube Data API caption download failed:', err.message);
                 error = err;
             }
         }
@@ -585,7 +661,7 @@ ${analysis}
 // Main endpoint for processing videos
 app.post('/api/process', async (req, res) => {
     try {
-        const { url, model, promptId, tokenLimit } = req.body;
+        const { url, model, promptId, tokenLimit, manualTranscript } = req.body;
         
         if (!url) {
             return res.status(400).json({ error: 'YouTube URL is required' });
@@ -605,17 +681,23 @@ app.post('/api/process', async (req, res) => {
         let transcript;
         let transcriptStatus = 'not_available';
         
-        try {
-            transcript = await getVideoTranscript(videoId);
-            console.log(`Transcript received in main process. Length: ${transcript ? transcript.length : 'null'} characters`);
-            if (transcript && transcript.length > 0) {
-                transcriptStatus = 'available';
+        if (manualTranscript && manualTranscript.trim().length > 0) {
+            transcript = manualTranscript.trim();
+            transcriptStatus = 'manual';
+            console.log('Manual transcript provided by user. Skipping extraction.');
+        } else {
+            try {
+                transcript = await getVideoTranscript(videoId);
+                console.log(`Transcript received in main process. Length: ${transcript ? transcript.length : 'null'} characters`);
+                if (transcript && transcript.length > 0) {
+                    transcriptStatus = 'available';
+                }
+            } catch (transcriptError) {
+                console.log('Transcript extraction failed, proceeding without transcript');
+                console.log('Transcript error details:', transcriptError.message);
+                transcript = '';
+                transcriptStatus = 'failed';
             }
-        } catch (transcriptError) {
-            console.log('Transcript extraction failed, proceeding without transcript');
-            console.log('Transcript error details:', transcriptError.message);
-            transcript = '';
-            transcriptStatus = 'failed';
         }
         
         // Check if captions exist via YouTube API
