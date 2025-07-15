@@ -483,6 +483,9 @@ function handleNewAnalysis() {
     hideAllSections();
     analysisForm.classList.remove('hidden');
     youtubeUrlInput.value = '';
+    if (document.getElementById('manualTranscriptInput')) {
+        document.getElementById('manualTranscriptInput').value = '';
+    }
     currentResult = null;
 }
 
