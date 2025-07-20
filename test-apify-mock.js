@@ -4,16 +4,19 @@ require('dotenv').config();
 // Mock ApifyClient for testing without paid subscription
 class MockApifyClient {
     constructor(config) {
+        if (!config || !config.token) {
+            throw new Error('Apify token is required');
+        }
         this.token = config.token;
         console.log('Mock ApifyClient initialized with token:', this.token ? 'Present' : 'Missing');
     }
-    
+
     task(taskId) {
         console.log(`Mock task called with ID: ${taskId}`);
         return {
             call: async (runInput) => {
                 console.log('Mock task run input:', runInput);
-                
+
                 // Simulate successful response
                 return {
                     id: 'mock-run-id-12345',
@@ -22,7 +25,7 @@ class MockApifyClient {
             }
         };
     }
-    
+
     dataset(datasetId) {
         console.log(`Mock dataset called with ID: ${datasetId}`);
         return {
@@ -45,7 +48,7 @@ class MockApifyClient {
 // Test function with mock client
 async function testApifyIntegrationWithMock() {
     console.log('=== Apify Integration Logic Test (Mock) ===\n');
-    
+
     // Test cases
     const testVideos = [
         {
@@ -54,7 +57,7 @@ async function testApifyIntegrationWithMock() {
             expected: 'success'
         },
         {
-            id: 'jNQXAC9IVRw', 
+            id: 'jNQXAC9IVRw',
             name: 'Me at the zoo (first YouTube video)',
             expected: 'success'
         },
@@ -64,40 +67,40 @@ async function testApifyIntegrationWithMock() {
             expected: 'success' // Mock will always succeed
         }
     ];
-    
+
     let successCount = 0;
     let errorCount = 0;
-    
+
     for (const testCase of testVideos) {
         console.log(`\n--- Testing: ${testCase.name} (${testCase.id}) ---`);
-        
+
         try {
             // Use mock client instead of real one
             const client = new MockApifyClient({
                 token: process.env.APIFY_API_KEY || 'mock-token'
             });
-            
+
             const videoUrl = `https://www.youtube.com/watch?v=${testCase.id}`;
             const runInput = { start_urls: [{ url: videoUrl }] };
-            
+
             console.log('Starting mock Apify task run...');
-            
+
             // Run the task and wait for completion
             const run = await client.task('dsuth10~test-youtube-structured-transcript-extractor-task').call(runInput);
-            
+
             console.log(`Mock Apify task run completed with ID: ${run.id}`);
-            
+
             // Fetch results from the dataset
             const { items } = await client.dataset(run.defaultDatasetId).listItems();
-            
+
             if (items && items.length > 0) {
                 // Extract transcript from the first item
                 const transcriptData = items[0];
-                
+
                 if (transcriptData.transcript && transcriptData.transcript.length > 0) {
                     // Handle different transcript formats
                     let fullTranscript = '';
-                    
+
                     if (Array.isArray(transcriptData.transcript)) {
                         // If transcript is an array of objects with text property
                         fullTranscript = transcriptData.transcript
@@ -107,7 +110,7 @@ async function testApifyIntegrationWithMock() {
                         // If transcript is already a string
                         fullTranscript = transcriptData.transcript;
                     }
-                    
+
                     console.log(`✅ SUCCESS: ${fullTranscript.substring(0, 100)}...`);
                     console.log(`📏 Length: ${fullTranscript.length} characters`);
                     successCount++;
@@ -119,27 +122,27 @@ async function testApifyIntegrationWithMock() {
                 console.log(`❌ FAILED: No items returned from dataset`);
                 errorCount++;
             }
-            
+
         } catch (error) {
             console.log(`❌ ERROR: ${error.message}`);
             errorCount++;
         }
     }
-    
+
     console.log('\n=== Test Summary ===');
     console.log(`✅ Successful: ${successCount}`);
     console.log(`❌ Failed: ${errorCount}`);
     console.log(`📊 Success Rate: ${((successCount / testVideos.length) * 100).toFixed(1)}%`);
-    
+
     // Environment check
     console.log('\n=== Environment Check ===');
     console.log(`🔑 APIFY_API_KEY configured: ${process.env.APIFY_API_KEY ? 'Yes' : 'No'}`);
-    
+
     if (!process.env.APIFY_API_KEY) {
         console.log('⚠️  WARNING: APIFY_API_KEY not found in environment variables');
         console.log('   Please add your Apify API key to the .env file');
     }
-    
+
     console.log('\n=== Integration Logic Validation ===');
     console.log('✅ API key validation logic works');
     console.log('✅ ApifyClient initialization works');
@@ -152,7 +155,7 @@ async function testApifyIntegrationWithMock() {
 // Test error handling scenarios
 async function testErrorHandling() {
     console.log('\n=== Error Handling Test ===');
-    
+
     // Test missing API key
     try {
         const client = new MockApifyClient({ token: null });
@@ -160,13 +163,13 @@ async function testErrorHandling() {
     } catch (error) {
         console.log('✅ Correctly handled missing API key');
     }
-    
+
     // Test empty response
     try {
         const client = new MockApifyClient({ token: 'mock-token' });
         const run = await client.actor('test').call({});
         const { items } = await client.dataset(run.defaultDatasetId).listItems();
-        
+
         if (!items || items.length === 0) {
             console.log('✅ Correctly handled empty response');
         }
@@ -190,4 +193,4 @@ if (require.main === module) {
         });
 }
 
-module.exports = { testApifyIntegrationWithMock, testErrorHandling }; 
+module.exports = { testApifyIntegrationWithMock, testErrorHandling };
