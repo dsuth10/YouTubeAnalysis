@@ -8,7 +8,9 @@ Description: {{description}}
 
 Transcript: {{transcript}}
 
-Your task is to analyze this video by first identifying the SaaS apps listed in the timestamps within the video description, then extracting detailed information about each app from the transcript. Follow this structure:
+Your task is to analyze this video by first identifying the SaaS apps listed in the timestamps within the video description, then extracting detailed information about each app from the transcript. The video description contains a list of the software products links to the software can be found in the timestamps and must be provided in the details for each software solution and the transcript provides further details about each product
+
+Follow this structure:
 
 ## Video Overview
 - Brief summary of what this video covers and how many products are reviewed
