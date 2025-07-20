@@ -56,7 +56,8 @@ function getTranscriptViaPython(videoId) {
         const { execSync } = require('child_process');
         try {
             const pythonVersion = execSync('python --version').toString().trim();
-            const pythonPath = execSync('where python').toString().trim();
+            const whichCmd = process.platform === 'win32' ? 'where python' : 'which python';
+            const pythonPath = execSync(whichCmd).toString().trim();
             console.log('Python version:', pythonVersion);
             console.log('Python path:', pythonPath);
         } catch (e) {
