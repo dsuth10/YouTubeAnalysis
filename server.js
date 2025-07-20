@@ -33,7 +33,9 @@ function extractVideoId(url) {
     const patterns = [
         /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
         /youtube\.com\/v\/([^&\n?#]+)/,
-        /youtube\.com\/watch\?.*v=([^&\n?#]+)/
+        /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+        /youtube\.com\/shorts\/([^&\n?#]+)/,
+        /youtube\.com\/live\/([^&\n?#]+)/
     ];
     
     for (const pattern of patterns) {
@@ -1651,7 +1653,13 @@ Format your response in clean markdown with proper headings and bullet points. F
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`🚀 YouTube Analysis App running on http://localhost:${PORT}`);
-    console.log(`📝 Make sure to configure your API keys in the .env file`);
-}); 
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`🚀 YouTube Analysis App running on http://localhost:${PORT}`);
+        console.log(`📝 Make sure to configure your API keys in the .env file`);
+    });
+}
+
+module.exports = {
+    extractVideoId
+};
