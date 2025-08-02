@@ -91,6 +91,9 @@ function setupEventListeners() {
     favoritesOnlyCheckbox.addEventListener('change', filterModels);
     favoritesFilterBtn.addEventListener('click', toggleFavoritesFilter);
     
+    // Model refresh functionality
+    document.getElementById('refreshModelsBtn').addEventListener('click', handleRefreshModels);
+    
     // Action buttons
     downloadBtn.addEventListener('click', handleDownload);
     downloadPromptBtn.addEventListener('click', handleDownloadPrompt);
@@ -137,6 +140,12 @@ function setupEventListeners() {
         if ((event.ctrlKey || event.metaKey) && event.key === 's') {
             event.preventDefault();
             handleFavoriteToggle();
+        }
+        
+        // Ctrl/Cmd + R to refresh models
+        if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+            event.preventDefault();
+            handleRefreshModels();
         }
     });
 }
@@ -561,6 +570,32 @@ async function loadModels() {
         
     } catch (error) {
         console.error('Error loading models:', error);
+    }
+}
+
+// Handle refresh models button click
+async function handleRefreshModels() {
+    const refreshBtn = document.getElementById('refreshModelsBtn');
+    const originalIcon = refreshBtn.innerHTML;
+    
+    try {
+        // Show loading state
+        refreshBtn.disabled = true;
+        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        
+        // Reload models
+        await loadModels();
+        
+        // Show success notification
+        showNotification('Models refreshed successfully!', 'success');
+        
+    } catch (error) {
+        console.error('Error refreshing models:', error);
+        showNotification('Failed to refresh models. Please try again.', 'error');
+    } finally {
+        // Restore button state
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = originalIcon;
     }
 }
 
