@@ -496,6 +496,19 @@ function handleNewAnalysis() {
         document.getElementById('manualTranscriptInput').value = '';
     }
     currentResult = null;
+    
+    // Reset Notion state
+    selectedDatabaseId = null;
+    if (databaseSelect) {
+        databaseSelect.value = '';
+    }
+    if (saveToNotionBtn) {
+        saveToNotionBtn.disabled = true;
+    }
+    if (saveStatus) {
+        saveStatus.textContent = '';
+        saveStatus.className = 'save-status';
+    }
 }
 
 // Handle retry
