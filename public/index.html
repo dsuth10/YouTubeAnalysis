@@ -18,117 +18,156 @@
         </header>
 
         <main class="main-content">
-            <div class="form-container">
-                <form id="analysisForm" class="analysis-form">
-                    <div class="form-group">
-                        <label for="youtubeUrl">
-                            <i class="fas fa-link"></i> YouTube Video URL
+            <div class="main-flex-row">
+                <div class="form-container">
+                    <form id="analysisForm" class="analysis-form">
+                        <div class="form-group">
+                            <label for="youtubeUrl">
+                                <i class="fas fa-link"></i> YouTube Video URL
+                            </label>
+                            <input 
+                                type="url" 
+                                id="youtubeUrl" 
+                                name="youtubeUrl" 
+                                placeholder="https://www.youtube.com/watch?v=..." 
+                                required
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="modelSelect">
+                                <i class="fas fa-brain"></i> AI Model
+                                <span class="model-stats" id="modelStats"></span>
+                            </label>
+                            <div class="model-select-container">
+                                <div class="search-controls">
+                                    <input 
+                                        type="text" 
+                                        id="modelSearch" 
+                                        placeholder="Search models... (Ctrl+F)" 
+                                        class="model-search"
+                                        title="Search models (Ctrl+F)"
+                                    >
+                                    <label class="favorites-only-checkbox">
+                                        <input type="checkbox" id="favoritesOnlyCheckbox">
+                                        <span>Favorites only</span>
+                                    </label>
+                                    <button 
+                                        type="button" 
+                                        id="favoritesFilterBtn" 
+                                        class="favorites-filter-btn" 
+                                        title="Show only favorites"
+                                    >
+                                        <i class="fas fa-star"></i>
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        id="refreshModelsBtn" 
+                                        class="refresh-btn" 
+                                        title="Refresh models from OpenRouter (Ctrl+R)"
+                                    >
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                </div>
+                                <div class="model-select-wrapper">
+                                    <select id="modelSelect" name="modelSelect" class="model-select">
+                                        <option value="">Loading models...</option>
+                                    </select>
+                                    <button 
+                                        type="button" 
+                                        id="favoriteToggleBtn" 
+                                        class="favorite-toggle-btn" 
+                                        title="Toggle favorite (Ctrl+S)"
+                                        aria-label="Toggle favorite for selected model"
+                                    >
+                                        <i class="far fa-star"></i>
+                                    </button>
+                                </div>
+                                <div class="model-info" id="modelInfo">
+                                    <span class="model-provider"></span>
+                                    <span class="model-pricing"></span>
+                                    <span class="model-context"></span>
+                                    <span class="favorite-count" id="favoriteCount"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="promptSelect">
+                                <i class="fas fa-file-alt"></i> Analysis Prompt
+                            </label>
+                            <select id="promptSelect" name="promptSelect" class="prompt-select">
+                                <option value="">Loading prompts...</option>
+                            </select>
+                            <small class="form-help">Choose a specialized analysis template for different video types</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="tokenLimitSelect">
+                                <i class="fas fa-hashtag"></i> Token Limit
+                            </label>
+                            <select id="tokenLimitSelect" name="tokenLimitSelect" class="token-limit-select">
+                                <option value="2000">2,000 tokens (Fast, concise)</option>
+                                <option value="4000">4,000 tokens (Balanced)</option>
+                                <option value="6000">6,000 tokens (Detailed)</option>
+                                <option value="8000">8,000 tokens (Comprehensive)</option>
+                                <option value="10000" selected>10,000 tokens (Very detailed)</option>
+                                <option value="15000">15,000 tokens (Extensive)</option>
+                                <option value="20000">20,000 tokens (Maximum detail)</option>
+                            </select>
+                            <small class="form-help">Higher token limits allow for more detailed analysis but cost more</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="manualTranscriptInput">
+                                <i class="fas fa-keyboard"></i> Manual Transcript (Optional)
+                            </label>
+                            <textarea id="manualTranscriptInput" name="manualTranscriptInput" rows="6" placeholder="Paste the full transcript here if you have it..." class="manual-transcript-input"></textarea>
+                            <small class="form-help">If you provide a transcript here, it will be used for analysis instead of auto-extracting from YouTube.</small>
+                        </div>
+                        <button type="submit" id="analyzeBtn" class="analyze-btn">
+                            <i class="fas fa-magic"></i> Analyze Video
+                        </button>
+                    </form>
+                </div>
+                <div class="prompt-editor-box">
+                    <div class="prompt-editor-section" id="editablePromptSection">
+                        <label for="promptTemplateSelect">
+                            <i class="fas fa-edit"></i> Prompt Template
                         </label>
-                        <input 
-                            type="url" 
-                            id="youtubeUrl" 
-                            name="youtubeUrl" 
-                            placeholder="https://www.youtube.com/watch?v=..." 
-                            required
-                        >
-                    </div>
-
-                    <div class="form-group">
-                        <label for="modelSelect">
-                            <i class="fas fa-brain"></i> AI Model
-                            <span class="model-stats" id="modelStats"></span>
-                        </label>
-                        <div class="model-select-container">
-                            <div class="search-controls">
-                                <input 
-                                    type="text" 
-                                    id="modelSearch" 
-                                    placeholder="Search models... (Ctrl+F)" 
-                                    class="model-search"
-                                    title="Search models (Ctrl+F)"
-                                >
-                                <label class="favorites-only-checkbox">
-                                    <input type="checkbox" id="favoritesOnlyCheckbox">
-                                    <span>Favorites only</span>
+                        <select id="promptTemplateSelect" name="promptTemplateSelect" class="prompt-template-select">
+                            <option value="">Select a template to edit...</option>
+                        </select>
+                        <small class="form-help">Select a template to customize the analysis prompt</small>
+                        <div class="prompt-editor-container" id="promptEditorContainer" style="display: none;">
+                            <div class="prompt-editor-header">
+                                <label for="editedPromptTextarea">
+                                    <i class="fas fa-pen"></i> Edit Prompt
                                 </label>
-                                <button 
-                                    type="button" 
-                                    id="favoritesFilterBtn" 
-                                    class="favorites-filter-btn" 
-                                    title="Show only favorites"
-                                >
-                                    <i class="fas fa-star"></i>
-                                </button>
-                                <button 
-                                    type="button" 
-                                    id="refreshModelsBtn" 
-                                    class="refresh-btn" 
-                                    title="Refresh models from OpenRouter (Ctrl+R)"
-                                >
-                                    <i class="fas fa-sync-alt"></i>
-                                </button>
+                                <div class="prompt-controls">
+                                    <label class="use-edited-prompt-checkbox">
+                                        <input type="checkbox" id="useEditedPromptCheckbox">
+                                        <span>Use edited prompt</span>
+                                    </label>
+                                    <button type="button" id="resetPromptBtn" class="reset-prompt-btn" title="Reset to original template">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="model-select-wrapper">
-                                <select id="modelSelect" name="modelSelect" class="model-select">
-                                    <option value="">Loading models...</option>
-                                </select>
-                                <button 
-                                    type="button" 
-                                    id="favoriteToggleBtn" 
-                                    class="favorite-toggle-btn" 
-                                    title="Toggle favorite (Ctrl+S)"
-                                    aria-label="Toggle favorite for selected model"
-                                >
-                                    <i class="far fa-star"></i>
-                                </button>
-                            </div>
-                            <div class="model-info" id="modelInfo">
-                                <span class="model-provider"></span>
-                                <span class="model-pricing"></span>
-                                <span class="model-context"></span>
-                                <span class="favorite-count" id="favoriteCount"></span>
+                            <textarea 
+                                id="editedPromptTextarea" 
+                                name="editedPromptTextarea" 
+                                rows="8" 
+                                placeholder="Select a template above to start editing..." 
+                                class="edited-prompt-textarea"
+                                maxlength="5000"
+                            ></textarea>
+                            <div class="prompt-status">
+                                <span class="prompt-indicator" id="promptIndicator">
+                                    <i class="fas fa-info-circle"></i>
+                                    <span id="promptStatusText">Original template will be used</span>
+                                </span>
+                                <span class="prompt-length" id="promptLength">0 / 5000 characters</span>
                             </div>
                         </div>
                     </div>
-
-                    <div class="form-group">
-                        <label for="promptSelect">
-                            <i class="fas fa-file-alt"></i> Analysis Prompt
-                        </label>
-                        <select id="promptSelect" name="promptSelect" class="prompt-select">
-                            <option value="">Loading prompts...</option>
-                        </select>
-                        <small class="form-help">Choose a specialized analysis template for different video types</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="tokenLimitSelect">
-                            <i class="fas fa-hashtag"></i> Token Limit
-                        </label>
-                        <select id="tokenLimitSelect" name="tokenLimitSelect" class="token-limit-select">
-                            <option value="2000">2,000 tokens (Fast, concise)</option>
-                            <option value="4000">4,000 tokens (Balanced)</option>
-                            <option value="6000">6,000 tokens (Detailed)</option>
-                            <option value="8000">8,000 tokens (Comprehensive)</option>
-                            <option value="10000" selected>10,000 tokens (Very detailed)</option>
-                            <option value="15000">15,000 tokens (Extensive)</option>
-                            <option value="20000">20,000 tokens (Maximum detail)</option>
-                        </select>
-                        <small class="form-help">Higher token limits allow for more detailed analysis but cost more</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="manualTranscriptInput">
-                            <i class="fas fa-keyboard"></i> Manual Transcript (Optional)
-                        </label>
-                        <textarea id="manualTranscriptInput" name="manualTranscriptInput" rows="6" placeholder="Paste the full transcript here if you have it..." class="manual-transcript-input"></textarea>
-                        <small class="form-help">If you provide a transcript here, it will be used for analysis instead of auto-extracting from YouTube.</small>
-                    </div>
-
-                    <button type="submit" id="analyzeBtn" class="analyze-btn">
-                        <i class="fas fa-magic"></i> Analyze Video
-                    </button>
-                </form>
+                </div>
             </div>
 
             <div id="loadingSection" class="loading-section hidden">

@@ -26,7 +26,6 @@ const notion = new Client({
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
 
 // Utility function to extract video ID from YouTube URL
 function extractVideoId(url) {
@@ -485,7 +484,7 @@ async function getVideoTranscript(videoId) {
 }
 
 // Analyze content with OpenRouter API
-async function analyzeContent(transcript, videoInfo, model, promptId = null, tokenLimit = 10000) {
+async function analyzeContent(transcript, videoInfo, model, promptId = null, tokenLimit = 10000, editedPrompt = null) {
     try {
         const apiKey = process.env.OPENROUTER_API_KEY;
         if (!apiKey) {
@@ -494,7 +493,10 @@ async function analyzeContent(transcript, videoInfo, model, promptId = null, tok
 
         let promptContent;
         
-        if (promptId) {
+        // Use edited prompt if provided, otherwise use template
+        if (editedPrompt && editedPrompt.trim() !== '') {
+            promptContent = editedPrompt.trim();
+        } else if (promptId) {
             // Load custom prompt
             const prompts = await getPrompts();
             const selectedPrompt = prompts.find(p => p.id === promptId);
@@ -664,7 +666,7 @@ ${analysis}
 // Main endpoint for processing videos
 app.post('/api/process', async (req, res) => {
     try {
-        const { url, model, promptId, tokenLimit, manualTranscript } = req.body;
+        const { url, model, promptId, tokenLimit, manualTranscript, editedPrompt } = req.body;
         
         if (!url) {
             return res.status(400).json({ error: 'YouTube URL is required' });
@@ -733,7 +735,7 @@ app.post('/api/process', async (req, res) => {
         }
 
         // Analyze content with selected prompt and token limit
-        const analysis = await analyzeContent(transcript, videoInfo, model || 'openai/gpt-3.5-turbo', promptId, tokenLimit);
+        const analysis = await analyzeContent(transcript, videoInfo, model || 'openai/gpt-3.5-turbo', promptId, tokenLimit, editedPrompt);
 
         // Generate title
         const title = await generateTitle(transcript, videoInfo, model || 'openai/gpt-3.5-turbo');
@@ -791,6 +793,24 @@ app.get('/api/prompts', async (req, res) => {
     } catch (error) {
         console.error('Error fetching prompts:', error);
         res.status(500).json({ error: 'Failed to load prompts' });
+    }
+});
+
+// Get individual prompt content
+app.get('/api/prompts/:promptId', async (req, res) => {
+    try {
+        const { promptId } = req.params;
+        const prompts = await getPrompts();
+        const selectedPrompt = prompts.find(p => p.id === promptId);
+        
+        if (!selectedPrompt) {
+            return res.status(404).json({ error: 'Prompt not found' });
+        }
+        
+        res.json({ content: selectedPrompt.content });
+    } catch (error) {
+        console.error('Error fetching prompt content:', error);
+        res.status(500).json({ error: 'Failed to load prompt content' });
     }
 });
 
@@ -1653,6 +1673,9 @@ Format your response in clean markdown with proper headings and bullet points. F
         res.status(500).json({ error: error.message });
     }
 });
+
+// Serve static files (must be after API routes)
+app.use(express.static('public'));
 
 if (require.main === module) {
     app.listen(PORT, () => {

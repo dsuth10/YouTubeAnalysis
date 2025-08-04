@@ -461,6 +461,177 @@ body {
     font-style: italic;
 }
 
+/* Editable Prompt Interface Styles */
+.prompt-template-select {
+    width: 100%;
+    padding: 15px;
+    border: 2px solid #e1e5e9;
+    border-radius: 12px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background: #f8f9fa;
+}
+
+.prompt-template-select:focus {
+    outline: none;
+    border-color: #667eea;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.prompt-editor-container {
+    margin-top: 15px;
+    border: 2px solid #e1e5e9;
+    border-radius: 12px;
+    background: white;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.prompt-editor-container.active {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.prompt-editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e1e5e9;
+}
+
+.prompt-editor-header label {
+    font-weight: 600;
+    color: #555;
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.prompt-editor-header label i {
+    margin-right: 8px;
+    color: #667eea;
+}
+
+.prompt-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.use-edited-prompt-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: #666;
+    cursor: pointer;
+    user-select: none;
+}
+
+.use-edited-prompt-checkbox input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.reset-prompt-btn {
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.reset-prompt-btn:hover {
+    background: #5a6268;
+    transform: translateY(-1px);
+}
+
+.reset-prompt-btn:active {
+    transform: translateY(0);
+}
+
+.edited-prompt-textarea {
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 0;
+    font-size: 14px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 200px;
+    background: white;
+    color: #333;
+}
+
+.edited-prompt-textarea:focus {
+    outline: none;
+    background: #fafbfc;
+}
+
+.edited-prompt-textarea::placeholder {
+    color: #999;
+    font-style: italic;
+}
+
+.prompt-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background: #f8f9fa;
+    border-top: 1px solid #e1e5e9;
+    font-size: 0.8rem;
+}
+
+.prompt-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #666;
+}
+
+.prompt-indicator i {
+    color: #17a2b8;
+}
+
+.prompt-indicator.using-edited {
+    color: #28a745;
+}
+
+.prompt-indicator.using-edited i {
+    color: #28a745;
+}
+
+.prompt-indicator.using-original {
+    color: #6c757d;
+}
+
+.prompt-indicator.using-original i {
+    color: #6c757d;
+}
+
+.prompt-length {
+    color: #999;
+    font-family: monospace;
+}
+
+.prompt-length.warning {
+    color: #ffc107;
+}
+
+.prompt-length.danger {
+    color: #dc3545;
+}
+
 .analyze-btn {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
@@ -1176,5 +1347,70 @@ body {
     .modal-content {
         width: 95%;
         margin: 20px;
+    }
+} 
+
+/* Two-column main layout for form and prompt editor */
+.main-flex-row {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 32px;
+    width: 100%;
+    min-height: 600px;
+}
+
+.form-container {
+    max-width: 600px;
+    width: 100%;
+    flex: 0 0 600px;
+}
+
+.prompt-editor-box {
+    flex: 1 1 0;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+    padding: 40px 32px;
+    min-width: 320px;
+    min-height: 600px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    margin-left: 0;
+}
+
+.prompt-editor-section {
+    width: 100%;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Make prompt textarea fill the box */
+.prompt-editor-container {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.edited-prompt-textarea {
+    min-height: 200px;
+    height: 200px;
+    max-height: 400px;
+    resize: vertical;
+    width: 100%;
+    font-size: 1rem;
+}
+
+@media (max-width: 1100px) {
+    .main-flex-row {
+        flex-direction: column;
+        gap: 24px;
+    }
+    .form-container, .prompt-editor-box {
+        max-width: 100%;
+        width: 100%;
+        min-width: 0;
     }
 } 

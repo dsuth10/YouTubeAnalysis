@@ -17,6 +17,16 @@ const errorSection = document.getElementById('errorSection');
 const loadingMessage = document.getElementById('loadingMessage');
 const errorMessage = document.getElementById('errorMessage');
 
+// Editable Prompt Interface Elements
+const promptTemplateSelect = document.getElementById('promptTemplateSelect');
+const promptEditorContainer = document.getElementById('promptEditorContainer');
+const editedPromptTextarea = document.getElementById('editedPromptTextarea');
+const useEditedPromptCheckbox = document.getElementById('useEditedPromptCheckbox');
+const resetPromptBtn = document.getElementById('resetPromptBtn');
+const promptIndicator = document.getElementById('promptIndicator');
+const promptStatusText = document.getElementById('promptStatusText');
+const promptLength = document.getElementById('promptLength');
+
 // Result elements
 const videoTitle = document.getElementById('videoTitle');
 const videoChannel = document.getElementById('videoChannel');
@@ -66,6 +76,11 @@ let currentResult = null;
 let allModels = []; // Store all available models
 let favoriteModels = []; // Store favorite model IDs
 
+// Editable Prompt Interface Variables
+let availablePrompts = []; // Store all available prompts
+let currentPromptTemplate = null; // Store the currently selected template
+let originalPromptContent = ''; // Store the original template content
+
 // Initialize the app
 document.addEventListener('DOMContentLoaded', function() {
     loadSettings();
@@ -93,6 +108,12 @@ function setupEventListeners() {
     
     // Model refresh functionality
     document.getElementById('refreshModelsBtn').addEventListener('click', handleRefreshModels);
+    
+    // Editable Prompt Interface Event Listeners
+    promptTemplateSelect.addEventListener('change', handlePromptTemplateChange);
+    editedPromptTextarea.addEventListener('input', handlePromptTextareaInput);
+    useEditedPromptCheckbox.addEventListener('change', handleUseEditedPromptChange);
+    resetPromptBtn.addEventListener('click', handleResetPrompt);
     
     // Action buttons
     downloadBtn.addEventListener('click', handleDownload);
@@ -160,6 +181,18 @@ async function handleFormSubmit(e) {
     const tokenLimit = parseInt(document.getElementById('tokenLimitSelect').value) || 10000;
     const manualTranscript = document.getElementById('manualTranscriptInput') ? document.getElementById('manualTranscriptInput').value.trim() : '';
     
+    // Get edited prompt if enabled
+    let editedPrompt = null;
+    if (useEditedPromptCheckbox.checked && editedPromptTextarea.value.trim() !== '') {
+        editedPrompt = editedPromptTextarea.value.trim();
+        
+        // Validate prompt length
+        if (editedPrompt.length > 5000) {
+            showError('Edited prompt is too long. Please keep it under 5000 characters.');
+            return;
+        }
+    }
+    
     if (!url) {
         showError('Please enter a YouTube URL');
         return;
@@ -172,7 +205,7 @@ async function handleFormSubmit(e) {
     }
     
     // Start analysis
-    await analyzeVideo(url, model, promptId, tokenLimit, manualTranscript);
+    await analyzeVideo(url, model, promptId, tokenLimit, manualTranscript, editedPrompt);
 }
 
 // Validate YouTube URL
@@ -187,17 +220,24 @@ function isValidYouTubeUrl(url) {
 }
 
 // Analyze video
-async function analyzeVideo(url, model, promptId, tokenLimit, manualTranscript) {
+async function analyzeVideo(url, model, promptId, tokenLimit, manualTranscript, editedPrompt = null) {
     try {
         showLoading();
         updateLoadingMessage('Fetching video information...');
+        
+        const requestBody = { url, model, promptId, tokenLimit, manualTranscript };
+        
+        // Add edited prompt if provided
+        if (editedPrompt) {
+            requestBody.editedPrompt = editedPrompt;
+        }
         
         const response = await fetch('/api/process', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ url, model, promptId, tokenLimit, manualTranscript })
+            body: JSON.stringify(requestBody)
         });
         
         const data = await response.json();
@@ -548,11 +588,19 @@ async function handleExportToNotion() {
             })
         });
         
-        const data = await response.json();
-        
         if (!response.ok) {
-            throw new Error(data.error || 'Failed to export to Notion');
+            const errorText = await response.text();
+            let errorMessage;
+            try {
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.error || 'Failed to export to Notion';
+            } catch {
+                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            }
+            throw new Error(errorMessage);
         }
+        
+        const data = await response.json();
         
         // Success
         alert(`✅ ${data.message}\n\nMain Page: ${data.pageUrl}\nAnalysis Page: ${data.childPageUrl}`);
@@ -570,6 +618,19 @@ async function handleExportToNotion() {
 async function loadModels() {
     try {
         const response = await fetch('/api/models');
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorMessage;
+            try {
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.error || 'Failed to load models';
+            } catch {
+                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            }
+            throw new Error(errorMessage);
+        }
+        
         const data = await response.json();
 
         // Store models globally
@@ -616,17 +677,33 @@ async function handleRefreshModels() {
 async function loadPrompts() {
     try {
         const response = await fetch('/api/prompts');
-        const data = await response.json();
         
-        if (response.ok) {
-            populatePromptSelect(data.prompts);
-        } else {
-            console.error('Failed to load prompts:', data.error);
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorMessage;
+            try {
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.error || 'Failed to load prompts';
+            } catch {
+                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            }
+            console.error('Failed to load prompts:', errorMessage);
+            availablePrompts = [];
             populatePromptSelect([]);
+            populatePromptTemplateSelect([]);
+            return;
         }
+        
+        const data = await response.json();
+        availablePrompts = data.prompts; // Store prompts globally
+        populatePromptSelect(data.prompts);
+        populatePromptTemplateSelect(data.prompts);
+        
     } catch (error) {
         console.error('Error loading prompts:', error);
+        availablePrompts = [];
         populatePromptSelect([]);
+        populatePromptTemplateSelect([]);
     }
 }
 
@@ -694,6 +771,25 @@ function populatePromptSelect(prompts) {
         option.value = prompt.id;
         option.textContent = prompt.name;
         promptSelect.appendChild(option);
+    });
+}
+
+// Populate prompt template select dropdown
+function populatePromptTemplateSelect(prompts) {
+    promptTemplateSelect.innerHTML = '';
+    
+    // Add default option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Select a template to edit...';
+    promptTemplateSelect.appendChild(defaultOption);
+    
+    // Add all prompts
+    prompts.forEach(prompt => {
+        const option = document.createElement('option');
+        option.value = prompt.id;
+        option.textContent = prompt.name;
+        promptTemplateSelect.appendChild(option);
     });
 }
 
@@ -1397,4 +1493,120 @@ function showNotification(message, type = 'info') {
             }
         }, 300);
     }, 3000);
+}
+
+// Editable Prompt Interface Event Handlers
+async function handlePromptTemplateChange() {
+    const selectedTemplateId = promptTemplateSelect.value;
+    
+    if (!selectedTemplateId) {
+        // Hide editor if no template selected
+        promptEditorContainer.style.display = 'none';
+        currentPromptTemplate = null;
+        originalPromptContent = '';
+        editedPromptTextarea.value = '';
+        useEditedPromptCheckbox.checked = false;
+        updatePromptStatus();
+        return;
+    }
+    
+    try {
+        // Fetch the prompt content
+        const response = await fetch(`/api/prompts/${selectedTemplateId}`);
+        
+        // Check response status before parsing JSON
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Store the template and original content
+        currentPromptTemplate = selectedTemplateId;
+        originalPromptContent = data.content;
+        
+        // Load the content into the textarea
+        editedPromptTextarea.value = originalPromptContent;
+        
+        // Show the editor
+        promptEditorContainer.style.display = 'block';
+        promptEditorContainer.classList.add('active');
+        
+        // Reset the checkbox
+        useEditedPromptCheckbox.checked = false;
+        
+        // Update status
+        updatePromptStatus();
+        updatePromptLength();
+        
+        showNotification('Template loaded successfully. You can now edit the prompt.', 'success');
+    } catch (error) {
+        console.error('Error loading template content:', error);
+        showNotification(`Failed to load template content: ${error.message}`, 'error');
+    }
+}
+
+function handlePromptTextareaInput() {
+    updatePromptLength();
+    
+    // Check if content has been modified
+    const currentContent = editedPromptTextarea.value;
+    const isModified = currentContent !== originalPromptContent;
+    
+    // Update the checkbox state based on modification
+    if (isModified && !useEditedPromptCheckbox.checked) {
+        useEditedPromptCheckbox.checked = true;
+    } else if (!isModified && useEditedPromptCheckbox.checked) {
+        useEditedPromptCheckbox.checked = false;
+    }
+    
+    updatePromptStatus();
+}
+
+function handleUseEditedPromptChange() {
+    updatePromptStatus();
+    
+    if (useEditedPromptCheckbox.checked) {
+        showNotification('Edited prompt will be used for analysis.', 'info');
+    } else {
+        showNotification('Original template will be used for analysis.', 'info');
+    }
+}
+
+function handleResetPrompt() {
+    if (currentPromptTemplate && originalPromptContent) {
+        editedPromptTextarea.value = originalPromptContent;
+        useEditedPromptCheckbox.checked = false;
+        updatePromptStatus();
+        updatePromptLength();
+        showNotification('Prompt reset to original template.', 'info');
+    }
+}
+
+function updatePromptStatus() {
+    const isUsingEdited = useEditedPromptCheckbox.checked && editedPromptTextarea.value.trim() !== '';
+    
+    if (isUsingEdited) {
+        promptIndicator.className = 'prompt-indicator using-edited';
+        promptStatusText.textContent = 'Edited prompt will be used';
+    } else {
+        promptIndicator.className = 'prompt-indicator using-original';
+        promptStatusText.textContent = 'Original template will be used';
+    }
+}
+
+function updatePromptLength() {
+    const length = editedPromptTextarea.value.length;
+    const maxLength = 5000;
+    
+    promptLength.textContent = `${length} / ${maxLength} characters`;
+    
+    // Update color based on length
+    promptLength.className = 'prompt-length';
+    if (length > maxLength * 0.8) {
+        promptLength.classList.add('warning');
+    }
+    if (length > maxLength * 0.95) {
+        promptLength.classList.add('danger');
+    }
 } 
