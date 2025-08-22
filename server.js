@@ -29,7 +29,8 @@ function extractVideoId(url) {
     const patterns = [
         /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
         /youtube\.com\/v\/([^&\n?#]+)/,
-        /youtube\.com\/watch\?.*v=([^&\n?#]+)/
+        /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+        /youtube\.com\/shorts\/([^&\n?#]+)/
     ];
     
     for (const pattern of patterns) {
@@ -42,6 +43,45 @@ function extractVideoId(url) {
 // Utility function to sanitize filename
 function sanitizeFilename(filename) {
     return filename.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+}
+
+// ---- Subtitle parsing helpers ----
+function parseVttToText(vttContent) {
+    if (!vttContent || typeof vttContent !== 'string') return '';
+    const lines = vttContent
+        .replace(/^WEBVTT.*$/m, '')
+        .replace(/^NOTE[\s\S]*?(\n\n|$)/gm, '')
+        // Remove inline style blocks like '::cue {...}' entirely
+        .replace(/^::cue[\s\S]*?(\n\n|$)/gm, '')
+        .replace(/^STYLE[\s\S]*?(\n\n|$)/gm, '')
+        .split(/\r?\n/);
+
+    const textLines = [];
+    for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+        // Skip cue indexes (pure numbers)
+        if (/^\d+$/.test(line)) continue;
+        // Skip timestamp lines
+        if (/^\d{2}:\d{2}:\d{2}[\.,]\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}[\.,]\d{3}/.test(line)) continue;
+        textLines.push(line);
+    }
+    return textLines.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function parseSrtToText(srtContent) {
+    if (!srtContent || typeof srtContent !== 'string') return '';
+    const lines = srtContent.split(/\r?\n/);
+    const textLines = [];
+    for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+        // Skip index lines and timestamp lines
+        if (/^\d+$/.test(line)) continue;
+        if (/^\d{2}:\d{2}:\d{2}[\.,]\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}[\.,]\d{3}/.test(line)) continue;
+        textLines.push(line);
+    }
+    return textLines.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 // Load and cache prompts from the prompts directory
@@ -183,8 +223,9 @@ async function getVideoMetadata(videoId) {
 // Get video transcript
 async function getVideoTranscript(videoId) {
     try {
-        const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-        return transcript.map(item => item.text).join(' ');
+        const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
+        const text = transcriptItems.map(item => item.text).join(' ');
+        return { text, source: 'captions' };
     } catch (error) {
         console.error('Error fetching transcript:', error.message);
         throw new Error('Could not fetch transcript. The video may not have captions enabled.');
@@ -1281,7 +1322,21 @@ app.post('/api/download/save', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`🚀 YouTube Analysis App running on http://localhost:${PORT}`);
-    console.log(`📝 Make sure to configure your API keys in the .env file`);
-}); 
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`🚀 YouTube Analysis App running on http://localhost:${PORT}`);
+        console.log(`📝 Make sure to configure your API keys in the .env file`);
+    });
+}
+
+module.exports = {
+    extractVideoId,
+    sanitizeFilename,
+    parseVttToText,
+    parseSrtToText,
+    getVideoTranscript,
+    // export these for completeness in case tests import them later
+    analyzeContent,
+    generateTitle,
+    generateMarkdown
+};
