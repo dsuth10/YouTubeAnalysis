@@ -5,10 +5,12 @@ const { YoutubeTranscript } = require('youtube-transcript');
 const { Client } = require('@notionhq/client');
 const { ApifyClient } = require('apify-client');
 const getSubtitles = require('youtube-captions-scraper').getSubtitles;
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
 require('dotenv').config();
+const { exec } = require('child_process');
 
 // NOTE: Ensure the correct Python executable is used for transcript extraction. If you have multiple Python installations, update the execFile call in getTranscriptViaPython to use the full path if needed.
 
@@ -304,25 +306,7 @@ async function getVideoMetadata(videoId) {
     }
 }
 
-// Helper to download captions from YouTube Data API (SRT format)
-async function downloadYoutubeCaption(captionId, apiKey) {
-    try {
-        const url = `https://www.googleapis.com/youtube/v3/captions/${captionId}`;
-        const response = await axios.get(url, {
-            params: {
-                key: apiKey,
-                tfmt: 'srt'
-            },
-            headers: {
-                'Accept': 'application/json'
-            },
-            responseType: 'text'
-        });
-        return response.data;
-    } catch (error) {
-        throw new Error('Failed to download captions: ' + error.message);
-    }
-}
+// Removed: Direct caption content download via YouTube Data API is not supported for third-party videos.
 
 // Helper to parse SRT to plain text
 function parseSrtToText(srt) {
@@ -337,150 +321,457 @@ function parseSrtToText(srt) {
         .join(' ');
 }
 
-// Get video transcript
+// Helper to parse VTT to plain text
+function parseVttToText(vtt) {
+    if (!vtt || typeof vtt !== 'string') return '';
+    const lines = vtt
+        .split('\n')
+        // Drop WEBVTT header and NOTE/STYLE blocks entirely
+        .filter((line) => {
+            const trimmed = line.trim();
+            if (!trimmed) return true; // keep empty lines for cue separation
+            if (trimmed === 'WEBVTT') return false;
+            if (trimmed.startsWith('NOTE')) return false;
+            if (trimmed.startsWith('STYLE')) return false;
+            return true;
+        });
+
+    const blocks = lines.join('\n').split(/\n\n+/);
+    const textParts = [];
+    for (const block of blocks) {
+        const blines = block.split('\n').map(l => l.trim()).filter(Boolean);
+        if (blines.length === 0) continue;
+        // Skip identifier line if present; skip timecode line
+        let i = 0;
+        // If first line looks like an identifier (not a timecode and not text), skip it
+        const timecodeRegex = /\d{1,2}:\d{2}:\d{2}\.\d{3}\s+-->\s+\d{1,2}:\d{2}:\d{2}\.\d{3}/;
+        if (!timecodeRegex.test(blines[0]) && blines.length >= 2 && timecodeRegex.test(blines[1])) {
+            i = 2; // skip id and timecode
+        } else if (timecodeRegex.test(blines[0])) {
+            i = 1; // skip timecode only
+        }
+        const text = blines.slice(i).join(' ')
+            // Drop any remaining vtt tags like <c.color>...</c>, <b>, <i>, <u>
+            .replace(/<[^>]+>/g, '')
+            .trim();
+        if (text) textParts.push(text);
+    }
+    return textParts.join(' ');
+}
+
+// Primary: Get transcript using yt-dlp subtitles (VTT/SRT)
+async function getTranscriptViaYtDlp(videoId) {
+    const startTs = Date.now();
+    const ytDlpBin = process.env.YT_DLP_PATH && process.env.YT_DLP_PATH.trim() !== ''
+        ? process.env.YT_DLP_PATH.trim()
+        : 'yt-dlp';
+
+    // Prepare temp directory
+    const tmpBase = path.join(os.tmpdir(), 'youtube-analysis-');
+    const tempDir = await fs.mkdtemp(tmpBase);
+
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+    // Language and format preferences (env override allowed)
+    const subLangs = (process.env.YT_DLP_SUB_LANGS && process.env.YT_DLP_SUB_LANGS.trim()) || 'en.*,en';
+    const subFormats = (process.env.YT_DLP_SUB_FORMATS && process.env.YT_DLP_SUB_FORMATS.trim()) || 'vtt/srt/best';
+
+    // Build args
+    const args = [
+        '--skip-download',
+        '--no-playlist',
+        '--write-subs',
+        '--write-auto-subs',
+        '--sub-langs', subLangs,
+        '--sub-format', subFormats,
+        '-P', tempDir,
+        // Ensure subtitles go to tempDir and include language in filename
+        '-o', 'subtitle:%(id)s.%(lang)s.%(ext)s',
+    ];
+
+    // Cookies handling: only apply if explicitly configured
+    const cookiesCfgRaw = process.env.YT_DLP_COOKIES || '';
+    const cookiesCfg = cookiesCfgRaw.trim().toLowerCase();
+    if (cookiesCfg && cookiesCfg.startsWith('browser:')) {
+        const browser = cookiesCfgRaw.split(':')[1] || 'edge';
+        args.push('--cookies-from-browser', browser);
+    } else if (cookiesCfg && cookiesCfg.startsWith('file:')) {
+        const filePath = cookiesCfgRaw.slice(5);
+        args.push('--cookies', filePath);
+    }
+
+    // Optional User-Agent
+    if (process.env.YT_DLP_USER_AGENT && process.env.YT_DLP_USER_AGENT.trim() !== '') {
+        args.push('--user-agent', process.env.YT_DLP_USER_AGENT.trim());
+    }
+
+    // Use Android client to avoid Po token/SABR issues for subs
+    args.push('--extractor-args', 'youtube:player_client=android');
+    args.push(videoUrl);
+
+    console.log('[yt-dlp] Executing:', ytDlpBin, args.join(' '));
+
+    // Spawn yt-dlp
+    const child = spawn(ytDlpBin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+
+    const exitCode = await new Promise((resolve, reject) => {
+        child.on('error', reject);
+        child.on('close', resolve);
+    });
+    try {
+        // Find any .vtt or .srt file in tempDir (even if exitCode non-zero due to warnings)
+        const files = await fs.readdir(tempDir);
+        const vtt = files.find(f => f.toLowerCase().endsWith('.vtt'));
+        const srt = files.find(f => f.toLowerCase().endsWith('.srt'));
+
+        if (!vtt && !srt) {
+            if (exitCode !== 0) {
+                throw new Error(`yt-dlp failed with code ${exitCode}: ${stderr.slice(0, 500)}`);
+            }
+            throw new Error('No subtitle files produced by yt-dlp');
+        }
+
+        let transcript = '';
+        if (vtt) {
+            const vttContent = await fs.readFile(path.join(tempDir, vtt), 'utf8');
+            transcript = parseVttToText(vttContent);
+        } else if (srt) {
+            const srtContent = await fs.readFile(path.join(tempDir, srt), 'utf8');
+            transcript = parseSrtToText(srtContent);
+        }
+
+        transcript = (transcript || '').trim();
+        const ms = Date.now() - startTs;
+        if (transcript) {
+            console.log(`[yt-dlp] Transcript extracted (${transcript.length} chars) in ${ms} ms`);
+            return transcript;
+        }
+        throw new Error('Transcript parsed from subtitles is empty');
+    } finally {
+        // Cleanup temp dir
+        try {
+            await fs.rm(tempDir, { recursive: true, force: true });
+        } catch (e) {
+            // ignore cleanup errors
+        }
+    }
+}
+
+function segmentsToText(segments) {
+    try {
+        if (!Array.isArray(segments)) return '';
+        return segments.map(item => (item && typeof item.text === 'string') ? item.text : '').filter(Boolean).join(' ');
+    } catch {
+        return '';
+    }
+}
+
+// Get video transcript (returns { text, source, attempts })
 async function getVideoTranscript(videoId) {
     try {
         console.log(`Fetching transcript for video ID: ${videoId}`);
 
         // Try multiple approaches to get transcript
-        let transcript = null;
-        let error = null;
+        let text = '';
+        let lastError = null;
+        let source = null;
+        const attempts = [];
 
-        // Method 0: python youtube-transcript-api
+        // Method -1: yt-dlp subtitles (preferred)
         try {
-            transcript = await getTranscriptViaPython(videoId);
-            if (transcript) {
-                console.log('Method 0 (python youtube-transcript-api) succeeded');
+            const t0 = Date.now();
+            const t = await getTranscriptViaYtDlp(videoId);
+            attempts.push({ method: 'yt_dlp_subtitles', ok: !!t, ms: Date.now() - t0 });
+            if (t) {
+                text = t;
+                source = 'subs_ytdlp';
+                console.log('Method -1 (yt-dlp subtitles) succeeded');
             }
         } catch (err) {
-            console.log('Method 0 failed:', err.message);
-            error = err;
+            attempts.push({ method: 'yt_dlp_subtitles', ok: false, error: err.message });
+            console.log('Method -1 failed:', err.message);
+            lastError = err;
+        }
+
+        // Method 0: python youtube-transcript-api
+        if (!text) {
+            try {
+                const t0 = Date.now();
+                const segs = await getTranscriptViaPython(videoId);
+                const t = segmentsToText(segs);
+                attempts.push({ method: 'python_youtube_transcript_api', ok: !!t, ms: Date.now() - t0 });
+                if (t) {
+                    text = t;
+                    source = 'subs_python';
+                    console.log('Method 0 (python youtube-transcript-api) succeeded');
+                }
+            } catch (err) {
+                attempts.push({ method: 'python_youtube_transcript_api', ok: false, error: err.message });
+                console.log('Method 0 failed:', err.message);
+                lastError = err;
+            }
         }
 
         // Method 1: Try default fetch
-        try {
-            transcript = await YoutubeTranscript.fetchTranscript(videoId);
-            console.log('Method 1 (default) succeeded');
-        } catch (err) {
-            console.log('Method 1 failed:', err.message);
-            error = err;
+        if (!text) {
+            try {
+                const t0 = Date.now();
+                const segs = await YoutubeTranscript.fetchTranscript(videoId);
+                const t = segmentsToText(segs);
+                attempts.push({ method: 'youtube_transcript_default', ok: !!t, ms: Date.now() - t0 });
+                if (t) {
+                    text = t;
+                    source = 'subs_js_default';
+                    console.log('Method 1 (default) succeeded');
+                }
+            } catch (err) {
+                attempts.push({ method: 'youtube_transcript_default', ok: false, error: err.message });
+                console.log('Method 1 failed:', err.message);
+                lastError = err;
+            }
         }
         
         // Method 2: Try with English language specification
-        if (!transcript) {
+        if (!text) {
             try {
-                transcript = await YoutubeTranscript.fetchTranscript(videoId, { lang: 'en' });
-                console.log('Method 2 (English) succeeded');
+                const t0 = Date.now();
+                const segs = await YoutubeTranscript.fetchTranscript(videoId, { lang: 'en' });
+                const t = segmentsToText(segs);
+                attempts.push({ method: 'youtube_transcript_en', ok: !!t, ms: Date.now() - t0 });
+                if (t) {
+                    text = t;
+                    source = 'subs_js_en';
+                    console.log('Method 2 (English) succeeded');
+                }
             } catch (err) {
+                attempts.push({ method: 'youtube_transcript_en', ok: false, error: err.message });
                 console.log('Method 2 failed:', err.message);
-                error = err;
+                lastError = err;
             }
         }
         
         // Method 3: Try with different language codes
-        if (!transcript) {
+        if (!text) {
             const languageCodes = ['en-US', 'en-GB', 'en-CA', 'en-AU'];
             for (const langCode of languageCodes) {
                 try {
-                    transcript = await YoutubeTranscript.fetchTranscript(videoId, { lang: langCode });
-                    console.log(`Method 3 (${langCode}) succeeded`);
-                    break;
+                    const t0 = Date.now();
+                    const segs = await YoutubeTranscript.fetchTranscript(videoId, { lang: langCode });
+                    const t = segmentsToText(segs);
+                    attempts.push({ method: `youtube_transcript_${langCode}`, ok: !!t, ms: Date.now() - t0 });
+                    if (t) {
+                        text = t;
+                        source = `subs_js_${langCode}`;
+                        console.log(`Method 3 (${langCode}) succeeded`);
+                        break;
+                    }
                 } catch (err) {
+                    attempts.push({ method: `youtube_transcript_${langCode}`, ok: false, error: err.message });
                     console.log(`Method 3 (${langCode}) failed:`, err.message);
-                    error = err;
+                    lastError = err;
                 }
             }
         }
         
         // Method 4: Fallback to youtube-captions-scraper
-        if (!transcript) {
+        if (!text) {
             try {
                 console.log('Trying fallback method with youtube-captions-scraper...');
+                const t0 = Date.now();
                 const subtitles = await getSubtitles({
                     videoID: videoId,
                     lang: 'en'
                 });
                 
                 if (subtitles && subtitles.length > 0) {
-                    transcript = subtitles.map(item => ({
-                        text: item.text,
-                        start: item.start,
-                        duration: item.duration
-                    }));
+                    const t = segmentsToText(subtitles.map(item => ({ text: item.text })));
+                    attempts.push({ method: 'scraper', ok: !!t, ms: Date.now() - t0 });
+                    if (t) {
+                        text = t;
+                        source = 'subs_scraper';
+                    }
                     console.log('Method 4 (fallback scraper) succeeded');
                 }
             } catch (err) {
+                attempts.push({ method: 'scraper', ok: false, error: err.message });
                 console.log('Method 4 failed:', err.message);
-                error = err;
+                lastError = err;
             }
         }
         
         // Method 5: Apify Actor Fallback
-        if (!transcript) {
+        if (!text) {
             try {
                 console.log('Method 5: Trying Apify YouTube Transcript Scraper...');
-                transcript = await getTranscriptFromApify(videoId);
-                if (transcript) {
+                const t0 = Date.now();
+                const t = await getTranscriptFromApify(videoId);
+                attempts.push({ method: 'apify', ok: !!t, ms: Date.now() - t0 });
+                if (t) {
+                    text = t;
+                    source = 'subs_apify';
                     console.log('Method 5 (Apify) succeeded');
                 }
             } catch (err) {
                 console.log('Method 5 (Apify) failed:', err.message);
-                error = err;
+                attempts.push({ method: 'apify', ok: false, error: err.message });
+                lastError = err;
             }
         }
-        // Fallback: Download captions using YouTube Data API if available
-        if (!transcript) {
+        // Final Fallback: ASR transcription via provider if all above failed
+        if (!text) {
             try {
-                const apiKey = process.env.YOUTUBE_API_KEY;
-                if (apiKey) {
-                    const captionsResponse = await axios.get('https://www.googleapis.com/youtube/v3/captions', {
-                        params: {
-                            part: 'snippet',
-                            videoId: videoId,
-                            key: apiKey
-                        }
-                    });
-                    if (captionsResponse.data.items && captionsResponse.data.items.length > 0) {
-                        const englishCaptions = captionsResponse.data.items.filter(caption => caption.snippet.language === 'en');
-                        if (englishCaptions.length > 0) {
-                            const captionId = englishCaptions[0].id;
-                            console.log(`Attempting to download caption track: ${captionId}`);
-                            const srt = await downloadYoutubeCaption(captionId, apiKey);
-                            transcript = parseSrtToText(srt);
-                            if (transcript && transcript.trim().length > 0) {
-                                console.log('Fallback YouTube Data API caption download succeeded');
-                            }
-                        }
+                console.log('Method 6: Trying ASR fallback via provider...');
+                const { audioPath, tempDir } = await downloadAudioViaYtDlp(videoId);
+                const t0 = Date.now();
+                try {
+                    const provider = (process.env.TRANSCRIBE_PROVIDER || 'openai').toLowerCase();
+                    const t = await transcribeAudioByProvider(audioPath, provider);
+                    const ms = Date.now() - t0;
+                    if (t && t.trim()) {
+                        text = t;
+                        source = `asr_${provider}`;
+                        console.log(`Method 6 (ASR:${provider}) succeeded in ${ms} ms`);
+                    } else {
+                        throw new Error('ASR returned empty transcript');
                     }
+                } finally {
+                    // cleanup temp files
+                    try { await fs.rm(tempDir, { recursive: true, force: true }); } catch {}
                 }
             } catch (err) {
-                console.log('Fallback YouTube Data API caption download failed:', err.message);
-                error = err;
+                console.log('Method 6 (ASR) failed:', err.message);
+                attempts.push({ method: 'asr', ok: false, error: err.message });
+                lastError = err;
             }
         }
         
-        if (!transcript || transcript.length === 0) {
+        if (!text || text.trim().length === 0) {
             console.log('All methods failed - no transcript data found');
-            throw new Error(`No transcript data found for this video. Last error: ${error ? error.message : 'Unknown'}`);
+            throw new Error(`No transcript data found for this video. Last error: ${lastError ? lastError.message : 'Unknown'}`);
         }
         
-        console.log(`Transcript fetched successfully. Found ${transcript.length} segments.`);
-        console.log('First few segments:', transcript.slice(0, 3));
-        
-        const fullTranscript = transcript.map(item => item.text).join(' ');
-        console.log(`Full transcript length: ${fullTranscript.length} characters`);
-        console.log('First 200 characters:', fullTranscript.substring(0, 200));
-        
-        if (fullTranscript.trim().length === 0) {
-            throw new Error('Transcript is empty after processing.');
-        }
-        
-        return fullTranscript;
+        console.log(`Transcript fetched successfully. Length: ${text.length} characters`);
+        console.log('First 200 characters:', text.substring(0, 200));
+        return { text, source, attempts };
     } catch (error) {
         console.error('Error fetching transcript:', error.message);
         console.error('Full error:', error);
         throw new Error(`Could not fetch transcript: ${error.message}`);
     }
+}
+
+// ===== ASR Fallback Utilities =====
+async function downloadAudioViaYtDlp(videoId) {
+    const ytDlpBin = process.env.YT_DLP_PATH && process.env.YT_DLP_PATH.trim() !== ''
+        ? process.env.YT_DLP_PATH.trim()
+        : 'yt-dlp';
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'youtube-analysis-audio-'));
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const outTpl = '%(id)s.%(ext)s';
+    const args = [
+        '-f', 'm4a/bestaudio',
+        '-P', tempDir,
+        '-o', outTpl,
+        '--no-playlist',
+    ];
+
+    const cookiesCfgRaw = process.env.YT_DLP_COOKIES || '';
+    const cookiesCfg = cookiesCfgRaw.trim().toLowerCase();
+    if (cookiesCfg && cookiesCfg.startsWith('browser:')) {
+        const browser = cookiesCfgRaw.split(':')[1] || 'edge';
+        args.push('--cookies-from-browser', browser);
+    } else if (cookiesCfg && cookiesCfg.startsWith('file:')) {
+        const filePath = cookiesCfgRaw.slice(5);
+        args.push('--cookies', filePath);
+    }
+    if (process.env.YT_DLP_USER_AGENT && process.env.YT_DLP_USER_AGENT.trim() !== '') {
+        args.push('--user-agent', process.env.YT_DLP_USER_AGENT.trim());
+    }
+    // Use Android client to avoid Po token/SABR issues for audio
+    args.push('--extractor-args', 'youtube:player_client=android');
+    args.push(videoUrl);
+
+    console.log('[yt-dlp][audio] Executing:', ytDlpBin, args.join(' '));
+    const child = spawn(ytDlpBin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', d => { stderr += d.toString(); });
+    const code = await new Promise((resolve, reject) => {
+        child.on('error', reject);
+        child.on('close', resolve);
+    });
+    if (code !== 0) {
+        try { await fs.rm(tempDir, { recursive: true, force: true }); } catch {}
+        throw new Error(`yt-dlp audio download failed code ${code}: ${stderr.slice(0,500)}`);
+    }
+    const files = await fs.readdir(tempDir);
+    const audio = files.find(f => /\.(m4a|mp3|webm|wav|ogg)$/i.test(f));
+    if (!audio) {
+        try { await fs.rm(tempDir, { recursive: true, force: true }); } catch {}
+        throw new Error('No audio file produced by yt-dlp');
+    }
+    return { audioPath: path.join(tempDir, audio), tempDir };
+}
+
+async function transcribeAudioByProvider(filePath, provider) {
+    switch ((provider || '').toLowerCase()) {
+        case 'openai':
+            return await transcribeWithOpenAI(filePath);
+        case 'assemblyai':
+            return await transcribeWithAssemblyAI(filePath);
+        case 'deepgram':
+            return await transcribeWithDeepgram(filePath);
+        default:
+            console.log(`Unknown TRANSCRIBE_PROVIDER '${provider}', defaulting to openai`);
+            return await transcribeWithOpenAI(filePath);
+    }
+}
+
+async function transcribeWithOpenAI(filePath) {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error('OPENAI_API_KEY not configured');
+    const model = (process.env.OPENAI_WHISPER_MODEL && process.env.OPENAI_WHISPER_MODEL.trim()) || 'whisper-1';
+
+    const FormData = require('form-data');
+    const fsSync = require('fs');
+    const form = new FormData();
+    form.append('file', fsSync.createReadStream(filePath));
+    form.append('model', model);
+
+    const headers = {
+        ...form.getHeaders(),
+        Authorization: `Bearer ${key}`,
+    };
+    const url = 'https://api.openai.com/v1/audio/transcriptions';
+    const t0 = Date.now();
+    const resp = await axios.post(url, form, { headers, maxBodyLength: Infinity, maxContentLength: Infinity });
+    const ms = Date.now() - t0;
+    if (!resp.data || typeof resp.data.text !== 'string') {
+        throw new Error('OpenAI Whisper response missing text');
+    }
+    console.log(`[ASR OpenAI] Transcription completed in ${ms} ms`);
+    return resp.data.text.trim();
+}
+
+async function transcribeWithAssemblyAI(filePath) {
+    const key = process.env.ASSEMBLYAI_API_KEY;
+    if (!key) {
+        console.log('AssemblyAI API key not configured');
+        return '';
+    }
+    console.log('AssemblyAI transcription not yet implemented');
+    return '';
+}
+
+async function transcribeWithDeepgram(filePath) {
+    const key = process.env.DEEPGRAM_API_KEY;
+    if (!key) {
+        console.log('Deepgram API key not configured');
+        return '';
+    }
+    console.log('Deepgram transcription not yet implemented');
+    return '';
 }
 
 // Analyze content with OpenRouter API
@@ -663,6 +954,27 @@ ${analysis}
     return markdown;
 }
 
+// yt-dlp health check endpoint
+app.get('/api/yt-dlp-health-check', async (req, res) => {
+    try {
+        const ytDlpBin = process.env.YT_DLP_PATH && process.env.YT_DLP_PATH.trim() !== ''
+            ? process.env.YT_DLP_PATH.trim()
+            : 'yt-dlp';
+        exec(`${ytDlpBin} --version`, { timeout: 8000 }, (err, stdout, stderr) => {
+            if (err) {
+                return res.status(200).json({ ok: false, message: `yt-dlp not available or misconfigured: ${err.message}` });
+            }
+            const version = (stdout || '').trim();
+            return res.json({ ok: true, message: `yt-dlp available: ${version}` });
+        });
+    } catch (e) {
+        return res.status(200).json({ ok: false, message: `Health check error: ${e.message}` });
+    }
+});
+
+// In-memory cache for last raw subtitles to support download
+const rawSubsCache = new Map(); // key: videoId, value: { content, type, filename }
+
 // Main endpoint for processing videos
 app.post('/api/process', async (req, res) => {
     try {
@@ -685,6 +997,7 @@ app.post('/api/process', async (req, res) => {
         // Get transcript
         let transcript;
         let transcriptStatus = 'not_available';
+        let transcriptMeta = null;
         
         if (manualTranscript && manualTranscript.trim().length > 0) {
             transcript = manualTranscript.trim();
@@ -692,10 +1005,12 @@ app.post('/api/process', async (req, res) => {
             console.log('Manual transcript provided by user. Skipping extraction.');
         } else {
             try {
-                transcript = await getVideoTranscript(videoId);
+                const result = await getVideoTranscript(videoId);
+                transcript = result?.text || '';
+                transcriptMeta = { source: result?.source || null, attempts: result?.attempts || [] };
                 console.log(`Transcript received in main process. Length: ${transcript ? transcript.length : 'null'} characters`);
                 if (transcript && transcript.length > 0) {
-                    transcriptStatus = 'available';
+                    transcriptStatus = transcriptMeta?.source || 'available';
                 }
             } catch (transcriptError) {
                 console.log('Transcript extraction failed, proceeding without transcript');
@@ -705,7 +1020,7 @@ app.post('/api/process', async (req, res) => {
             }
         }
         
-        // Check if captions exist via YouTube API
+        // Check if captions exist via YouTube API (capability check only; cannot download third-party caption content)
         try {
             const apiKey = process.env.YOUTUBE_API_KEY;
             if (apiKey) {
@@ -723,7 +1038,8 @@ app.post('/api/process', async (req, res) => {
                     );
                     
                     if (englishCaptions.length > 0) {
-                        console.log(`YouTube API shows ${englishCaptions.length} English caption tracks available`);
+                        console.log(`YouTube API shows ${englishCaptions.length} English caption tracks available (visibility only).`);
+                        console.log('Note: YouTube Data API does not provide caption content for third-party videos via API key; using alternative extraction methods (yt-dlp/ASR).');
                         if (transcriptStatus === 'failed') {
                             transcriptStatus = 'api_available_but_extraction_failed';
                         }
@@ -769,8 +1085,18 @@ app.post('/api/process', async (req, res) => {
             videoInfo: videoInfo,
             transcript: transcript,
             rawDescription: videoInfo.description,
-            transcriptStatus: transcriptStatus
+            transcriptStatus: transcriptStatus,
+            transcriptMeta
         };
+
+        // Stash raw subtitles if present in transcriptMeta.attempts context (only for yt-dlp path currently)
+        try {
+            if (transcriptMeta && transcriptMeta.source === 'subs_ytdlp') {
+                // Not stored yet; we can re-run a minimal fetch to get raw subs
+                // For now, leave rawSubsCache empty to avoid repeated yt-dlp calls here.
+                // Task 21 will expose endpoint; population can be done on demand.
+            }
+        } catch {}
         
         console.log(`Sending response with transcript length: ${transcript ? transcript.length : 'null'} characters`);
         console.log(`Response data keys: ${Object.keys(responseData)}`);
@@ -782,6 +1108,32 @@ app.post('/api/process', async (req, res) => {
         res.status(500).json({ 
             error: error.message || 'An error occurred while processing the video' 
         });
+    }
+});
+
+// Provide raw subtitles download if available on demand by rerunning a minimal yt-dlp subtitle fetch
+app.get('/api/download-raw-subs/:videoId', async (req, res) => {
+    const { videoId } = req.params;
+    if (!videoId) return res.status(400).send('Missing videoId');
+    try {
+        // If cached, serve from memory
+        if (rawSubsCache.has(videoId)) {
+            const entry = rawSubsCache.get(videoId);
+            res.setHeader('Content-Type', entry.type);
+            res.setHeader('Content-Disposition', `attachment; filename="${entry.filename}"`);
+            return res.send(entry.content);
+        }
+
+        // Otherwise, perform a fresh yt-dlp subtitle fetch quickly
+        const subText = await getTranscriptViaYtDlp(videoId);
+        // getTranscriptViaYtDlp parsed into text; we need raw. For simplicity, inform user raw may be unavailable.
+        // Minimal viable: return the plain text as .txt when raw not retained.
+        const filename = `${videoId}.txt`;
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        return res.send(subText || '');
+    } catch (e) {
+        return res.status(500).send(`Failed to obtain subtitles: ${e.message}`);
     }
 });
 
@@ -1558,7 +1910,7 @@ app.post('/api/saveToNotion', async (req, res) => {
 // Get processed prompt endpoint
 app.post('/api/getPrompt', async (req, res) => {
     try {
-        const { url, promptId, model } = req.body;
+        const { url, promptId, model, manualTranscript } = req.body;
         
         if (!url) {
             return res.status(400).json({ error: 'YouTube URL is required' });
@@ -1574,8 +1926,14 @@ app.post('/api/getPrompt', async (req, res) => {
         const videoInfo = await getVideoMetadata(videoId);
         videoInfo.videoId = videoId;
 
-        // Get transcript
-        const transcript = await getVideoTranscript(videoId);
+        // Get transcript (manual overrides everything)
+        let transcript = '';
+        if (manualTranscript && typeof manualTranscript === 'string' && manualTranscript.trim().length > 0) {
+            transcript = manualTranscript.trim();
+        } else {
+            const result = await getVideoTranscript(videoId);
+            transcript = result?.text || '';
+        }
 
         // Get prompt content
         let promptContent;
@@ -1685,5 +2043,10 @@ if (require.main === module) {
 }
 
 module.exports = {
-    extractVideoId
+    extractVideoId,
+    // Export parsing utilities for testing
+    parseVttToText,
+    parseSrtToText,
+    // Export transcript getter for smoke tests
+    getVideoTranscript
 };

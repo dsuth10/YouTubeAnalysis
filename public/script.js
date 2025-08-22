@@ -42,11 +42,20 @@ const previewBtn = document.getElementById('previewBtn');
 const exportBtn = document.getElementById('exportBtn');
 const newAnalysisBtn = document.getElementById('newAnalysisBtn');
 const retryBtn = document.getElementById('retryBtn');
+const downloadRawSubsBtn = document.getElementById('downloadRawSubsBtn');
+const transcriptMetaDiv = document.getElementById('transcriptMeta');
+const transcriptSourceLabel = document.getElementById('transcriptSourceLabel');
+const transcriptAttemptsLabel = document.getElementById('transcriptAttemptsLabel');
+const ytDlpHealthBtn = document.getElementById('ytDlpHealthBtn');
 
 // Preview elements
 const previewSection = document.getElementById('previewSection');
 const markdownPreview = document.getElementById('markdownPreview');
 const closePreviewBtn = document.getElementById('closePreviewBtn');
+const viewRenderedBtn = document.getElementById('viewRenderedBtn');
+const viewRawBtn = document.getElementById('viewRawBtn');
+const copyMdBtn = document.getElementById('copyMdBtn');
+const copyHtmlBtn = document.getElementById('copyHtmlBtn');
 
 // Modal elements
 const settingsBtn = document.getElementById('settingsBtn');
@@ -124,9 +133,15 @@ function setupEventListeners() {
     exportBtn.addEventListener('click', handleExportToNotion);
     newAnalysisBtn.addEventListener('click', handleNewAnalysis);
     retryBtn.addEventListener('click', handleRetry);
+    if (downloadRawSubsBtn) downloadRawSubsBtn.addEventListener('click', handleDownloadRawSubs);
+    if (ytDlpHealthBtn) ytDlpHealthBtn.addEventListener('click', handleYtDlpHealthCheck);
     
     // Preview controls
     closePreviewBtn.addEventListener('click', closePreview);
+    if (viewRenderedBtn) viewRenderedBtn.addEventListener('click', showRenderedPreview);
+    if (viewRawBtn) viewRawBtn.addEventListener('click', showRawPreview);
+    if (copyMdBtn) copyMdBtn.addEventListener('click', copyMarkdownToClipboard);
+    if (copyHtmlBtn) copyHtmlBtn.addEventListener('click', copyHtmlToClipboard);
     
     // Modal controls
     settingsBtn.addEventListener('click', openSettings);
@@ -321,6 +336,24 @@ function showResult(data) {
     
     resultSection.classList.remove('hidden');
     analyzeBtn.disabled = false;
+
+    // Transcript meta labels
+    if (data.transcriptMeta) {
+        transcriptMetaDiv.style.display = '';
+        const source = data.transcriptMeta.source || data.transcriptStatus || 'unknown';
+        const attempts = Array.isArray(data.transcriptMeta.attempts) ? data.transcriptMeta.attempts.length : 0;
+        transcriptSourceLabel.textContent = `Transcript via: ${source}`;
+        transcriptAttemptsLabel.textContent = `Attempts: ${attempts}`;
+    } else {
+        transcriptMetaDiv.style.display = 'none';
+    }
+
+    // Enable Raw Subs button only for yt-dlp source for now
+    if (data.transcriptMeta && data.transcriptMeta.source === 'subs_ytdlp') {
+        downloadRawSubsBtn.style.display = '';
+    } else {
+        downloadRawSubsBtn.style.display = 'none';
+    }
 }
 
 // Show error
@@ -445,7 +478,7 @@ ${currentResult.transcript}
 
 ---
 
-*This transcript was extracted directly from YouTube using the YouTube Data API.*
+    *This transcript was extracted automatically. Source: ${currentResult.transcriptMeta?.source || currentResult.transcriptStatus || 'unknown'}.*
 `;
     
     // Create and download the file
@@ -460,6 +493,53 @@ ${currentResult.transcript}
     URL.revokeObjectURL(url);
     
     showNotification('Transcript downloaded successfully!', 'success');
+}
+
+// Handle download raw subtitles
+async function handleDownloadRawSubs() {
+    if (!currentResult) return;
+    try {
+        downloadRawSubsBtn.disabled = true;
+        downloadRawSubsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing...';
+        const videoId = currentResult.videoInfo.videoId;
+        const resp = await fetch(`/api/download-raw-subs/${videoId}`);
+        if (!resp.ok) throw new Error(await resp.text());
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${videoId}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showNotification('Raw subtitles downloaded (plain text fallback).', 'success');
+    } catch (e) {
+        showNotification(`Failed to download raw subtitles: ${e.message}`, 'error');
+    } finally {
+        downloadRawSubsBtn.disabled = false;
+        downloadRawSubsBtn.innerHTML = '<i class="fas fa-closed-captioning"></i> Download Raw Subtitles';
+    }
+}
+
+// yt-dlp health check
+async function handleYtDlpHealthCheck() {
+    try {
+        ytDlpHealthBtn.disabled = true;
+        ytDlpHealthBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+        const resp = await fetch('/api/yt-dlp-health-check');
+        const data = await resp.json();
+        if (data.ok) {
+            showNotification(data.message, 'success');
+        } else {
+            showNotification(data.message, 'error');
+        }
+    } catch (e) {
+        showNotification(`Health check failed: ${e.message}`, 'error');
+    } finally {
+        ytDlpHealthBtn.disabled = false;
+        ytDlpHealthBtn.innerHTML = '<i class="fas fa-stethoscope"></i> Test yt-dlp';
+    }
 }
 
 // Handle download description
@@ -517,9 +597,66 @@ ${currentResult.rawDescription}
 // Handle preview
 function handlePreview() {
     if (!currentResult) return;
-    
-    markdownPreview.textContent = currentResult.markdown;
+    showRenderedPreview();
     previewSection.classList.remove('hidden');
+}
+
+// Markdown preview helpers
+function stripFrontMatter(md) {
+    if (!md) return '';
+    const lines = md.split('\n');
+    if (lines[0]?.trim() !== '---') return md;
+    let i = 1;
+    while (i < lines.length && lines[i].trim() !== '---') i++;
+    return lines.slice(i + 1).join('\n');
+}
+
+function renderMarkdownPreview(markdown) {
+    const source = stripFrontMatter(markdown || '');
+    if (window.marked) {
+        window.marked.setOptions({ breaks: true, gfm: true, headerIds: false, mangle: false });
+        const html = window.marked.parse(source);
+        const sanitized = window.DOMPurify ? window.DOMPurify.sanitize(html, { USE_PROFILES: { html: true } }) : html;
+        markdownPreview.innerHTML = sanitized;
+        if (window.hljs) {
+            markdownPreview.querySelectorAll('pre code').forEach(block => window.hljs.highlightElement(block));
+        }
+    } else {
+        markdownPreview.textContent = source;
+    }
+}
+
+function showRenderedPreview() {
+    if (!currentResult) return;
+    renderMarkdownPreview(currentResult.markdown);
+}
+
+function showRawPreview() {
+    if (!currentResult) return;
+    markdownPreview.textContent = stripFrontMatter(currentResult.markdown || '');
+}
+
+async function copyMarkdownToClipboard() {
+    if (!currentResult) return;
+    try {
+        await navigator.clipboard.writeText(currentResult.markdown || '');
+        showNotification('Markdown copied!', 'success');
+    } catch (e) {
+        showNotification('Failed to copy Markdown', 'error');
+    }
+}
+
+async function copyHtmlToClipboard() {
+    if (!currentResult) return;
+    try {
+        const source = stripFrontMatter(currentResult.markdown || '');
+        const html = window.marked ? window.marked.parse(source) : source;
+        const sanitized = window.DOMPurify ? window.DOMPurify.sanitize(html, { USE_PROFILES: { html: true } }) : html;
+        await navigator.clipboard.writeText(sanitized);
+        showNotification('HTML copied!', 'success');
+    } catch (e) {
+        showNotification('Failed to copy HTML', 'error');
+    }
 }
 
 // Close preview

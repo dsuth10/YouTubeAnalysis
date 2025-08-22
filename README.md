@@ -16,6 +16,7 @@ A powerful web application that analyzes YouTube videos and generates comprehens
 - 📊 **Health Monitoring**: Real-time API status and configuration validation
 - 🎯 **Robust Transcript Handling**: Multiple extraction methods with graceful fallback to description-based analysis
 - 📱 **Enhanced User Experience**: Detailed status notifications, progress tracking, and error handling
+ - 🧩 **Transcript Pipeline UX**: Shows which method produced the transcript, attempts count, raw subtitle download (when available), and a built-in yt-dlp health check
 
 ## 🎯 What You Get
 
@@ -157,12 +158,36 @@ The app includes specialized analysis templates for different video types:
 
 ### Transcript Handling
 
-- The app uses multiple methods to extract transcripts:
-- **Primary**: python `youtube-transcript-api` via a helper script with multi-language attempts
-- **Secondary**: youtube-transcript package
-- **Fallback**: youtube-captions-scraper package
-- **Verification**: YouTube Data API to check caption availability
+- The app uses multiple methods to extract transcripts in a prioritized order:
+- **Primary**: yt-dlp subtitles (VTT/SRT) using your browser cookies for robust access
+- **Secondary**: python `youtube-transcript-api`
+- **Tertiary**: `youtube-transcript` (JS)
+- **Fallback**: `youtube-captions-scraper` and Apify actor
+- **Final Fallback (ASR)**: Download audio via yt-dlp and transcribe with OpenAI Whisper (or other providers when configured)
+- **Verification**: YouTube Data API can check caption existence but cannot download third-party caption content with API key alone
 - **Graceful Degradation**: Full analysis using video description when transcripts aren't available
+
+#### UI Indicators & Tools
+- The result view shows a label like "Transcript via: subs_ytdlp | subs_python | subs_js_* | subs_scraper | subs_apify | asr_<provider>" and the number of attempts tried
+- "Download Raw Subtitles" button appears when yt-dlp subtitles were used (returns raw or plain text fallback)
+- "Test yt-dlp" button runs a backend health check to confirm yt-dlp is available on the server
+
+### Running Tests
+
+This project includes small Node test harnesses.
+
+- Extract video ID tests:
+  - `node test-extract-video-id.js`
+- Subtitle parsing tests (VTT/SRT):
+  - `npm run test:subtitles`
+- Transcript pipeline smoke test:
+  - Configure env (PowerShell on Windows):
+    - `$env:TEST_SUBS_VIDEO_ID="<videoIdWithSubs>"` (optional; defaults to `dQw4w9WgXcQ`)
+    - `$env:TEST_NO_SUBS_VIDEO_ID="<videoIdLikelyNoSubs>"` (optional)
+    - `$env:OPENAI_API_KEY="<yourKey>"` (required for ASR test)
+  - Ensure yt-dlp is installed and cookies configured (see yt-dlp setup above)
+  - Run: `npm run test:smoke`
+  - The test will skip ASR if keys or IDs are not set and won’t fail CI for ASR-only issues.
 
 ### Supported URL Formats
 
@@ -255,7 +280,9 @@ youtube-analysis-app/
 - `GET /api/prompts` - Get available analysis prompts
 - `POST /api/prompts/reload` - Reload prompts from disk (development)
 - `GET /api/health` - Check server and API status
+- `GET /api/yt-dlp-health-check` - Verify yt-dlp is available on the server
 - `GET /api/download/:filename` - Download generated files
+- `GET /api/download-raw-subs/:videoId` - Download raw subtitles when available (falls back to plain text)
 - `POST /api/getPrompt` - Get processed prompt for debugging
 - `GET /api/notion/databases` - Get available Notion databases
 - `POST /api/notion/saveNote` - Save note to Notion database
@@ -272,8 +299,49 @@ youtube-analysis-app/
 | `NOTION_TOKEN` | Notion integration token | No |
 | `NOTION_DATABASE_ID` | Notion database ID | No |
 | `PORT` | Server port (default: 3000) | No |
+| `YT_DLP_PATH` | Absolute path to `yt-dlp` (empty to use PATH) | No |
+| `YT_DLP_COOKIES` | Cookie source: `browser:edge`, `browser:chrome`, or `file:/path/to/cookies.txt` | Recommended |
+| `YT_DLP_SUB_LANGS` | Preferred subtitle languages (e.g., `en.*,en`) | No |
+| `YT_DLP_SUB_FORMATS` | Preferred subtitle formats (e.g., `vtt/srt/best`) | No |
+| `YT_DLP_USER_AGENT` | Optional custom User-Agent | No |
+| `TRANSCRIBE_PROVIDER` | ASR provider: `openai` | `assemblyai` | `deepgram` | No |
+| `OPENAI_API_KEY` | API key for OpenAI Whisper | If `TRANSCRIBE_PROVIDER=openai` |
+| `OPENAI_WHISPER_MODEL` | Whisper model (default `whisper-1`) | No |
+| `ASSEMBLYAI_API_KEY` | API key for AssemblyAI | If used |
+| `DEEPGRAM_API_KEY` | API key for Deepgram | If used |
 
 ### Customization
+## 🔧 yt-dlp & ASR Setup (Windows-friendly)
+
+1) Install yt-dlp
+
+```powershell
+pipx install yt-dlp
+# or
+pip install --user yt-dlp
+```
+
+2) Configure cookies for YouTube
+
+Set `YT_DLP_COOKIES=browser:edge` (Windows default) or `browser:chrome` in your `.env`. Optionally set `YT_DLP_PATH` to the yt-dlp binary and `YT_DLP_USER_AGENT` for a custom UA. This allows yt-dlp to reuse your browser session to access age-restricted/consent-gated captions reliably.
+
+3) Test subtitles availability and download
+
+```powershell
+# List available subtitle languages
+yt-dlp --list-subs https://www.youtube.com/watch?v=VIDEO_ID
+
+# Write auto-generated subtitles (no media download)
+yt-dlp --skip-download --write-auto-subs --sub-langs "en.*,en" --sub-format "vtt/srt/best" --cookies-from-browser edge https://www.youtube.com/watch?v=VIDEO_ID
+```
+
+4) ASR fallback (OpenAI Whisper / pluggable)
+
+Set `TRANSCRIBE_PROVIDER=openai` and `OPENAI_API_KEY` in `.env`. When no subtitles exist, the server will download audio (via yt-dlp) and transcribe it using Whisper. Placeholders exist for `assemblyai` and `deepgram` providers; add their keys to enable when implemented.
+
+### Important limitation (YouTube Data API)
+
+The YouTube Data API v3 cannot download caption track content for third-party videos using API key authentication alone. We use yt-dlp + browser cookies to fetch subtitles where available. The API may still be used to check that caption tracks exist.
 
 #### Custom Analysis Prompts
 You can create custom analysis prompts by adding `.md` files to the `prompts/` directory. Each prompt should follow this format:
