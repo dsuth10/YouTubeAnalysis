@@ -197,11 +197,411 @@
         ],
         "status": "done",
         "subtasks": []
+      },
+      {
+        "id": 16,
+        "title": "Integrate yt-dlp for Advanced Transcript Extraction",
+        "description": "Integrate yt-dlp into server.js's getVideoTranscript() as the primary transcript source, enabling more robust subtitle extraction with configurable options.",
+        "details": "1.  **Create `getTranscriptViaYtDlp(videoId)` function**: This function will encapsulate all yt-dlp logic.\n2.  **Spawn yt-dlp process**: Use Node.js `child_process.spawn` to execute `yt-dlp`.\n    -   Command arguments: `--skip-download --write-subs --write-auto-subs --sub-langs \"en.*,en\" --sub-format \"vtt/srt/best\"`.\n    -   **Cookie handling**: Implement logic to dynamically add `--cookies-from-browser edge` by default. If `process.env.YT_DLP_COOKIES` is set, use its value (e.g., `browser:chrome` or `file:/path/to/cookies.txt`).\n    -   **User-Agent handling**: If `process.env.YT_DLP_USER_AGENT` is set, add `--user-agent \"${process.env.YT_DLP_USER_AGENT}\"` to the command.\n3.  **Temporary Directory Management**: Create a unique temporary directory for each video ID to store the subtitle files (`.vtt` or `.srt`). Ensure this directory is cleaned up after processing.\n4.  **File Parsing**: \n    -   Implement `parseVttToText(filePath)` similar to `parseSrtToText` to convert VTT files into plain text.\n    -   Modify `getTranscriptViaYtDlp` to read the generated `.vtt` or `.srt` file from the temp directory and parse it.\n5.  **Integration into `getVideoTranscript()`**: Modify `getVideoTranscript()` in `server.js` to call `getTranscriptViaYtDlp(videoId)` first. If `yt-dlp` successfully returns a transcript, use it. Otherwise, fall back to the existing `youtube-transcript` method. Ensure existing fallbacks are not removed.\n6.  **Error Handling and Logging**: Add minimal `try-catch` blocks and `console.error` for `yt-dlp` execution failures, file reading/parsing errors, and cases where no subtitles are found. Log the specific `yt-dlp` command being executed for debugging.",
+        "testStrategy": "1.  **Basic Functionality**: Call `getVideoTranscript()` with a standard YouTube video ID (e.g., 'dQw4w9WgXcQ') and verify that the transcript is successfully extracted using `yt-dlp` and returned as plain text.\n2.  **Subtitle Formats**: Test with videos known to have both `.vtt` and `.srt` subtitles to ensure both formats are correctly parsed into plain text.\n3.  **Cookie Handling**: \n    -   Test without `YT_DLP_COOKIES` set (should default to Edge).\n    -   Set `YT_DLP_COOKIES` to `browser:chrome` and verify `yt-dlp` attempts to use Chrome cookies.\n    -   Set `YT_DLP_COOKIES` to a dummy file path (e.g., `file:/tmp/cookies.txt`) and verify `yt-dlp` attempts to use the file.\n4.  **User-Agent Handling**: Set `YT_DLP_USER_AGENT` to a custom string and verify it's passed to `yt-dlp`.\n5.  **Fallback Mechanism**: \n    -   Test with a video where `yt-dlp` might fail (e.g., a private video, or by temporarily breaking the `yt-dlp` command) and verify that the system correctly falls back to the `youtube-transcript` method.\n    -   Ensure that if `yt-dlp` returns no subtitles, the fallback is triggered.\n6.  **Error Handling**: Simulate scenarios where `yt-dlp` fails (e.g., `yt-dlp` not found, invalid video ID for `yt-dlp`) and verify that errors are logged and handled gracefully without crashing the server, and that the fallback mechanism is attempted.\n7.  **Temporary File Cleanup**: After each test, verify that the temporary directories and subtitle files created by `yt-dlp` are properly removed.",
+        "status": "pending",
+        "dependencies": [
+          1,
+          5,
+          9
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement `getTranscriptViaYtDlp` with `yt-dlp` Execution and Temp Dir Management",
+            "description": "Create a new asynchronous function `getTranscriptViaYtDlp(videoId)` that encapsulates all `yt-dlp` logic. Inside this function, use Node.js `child_process.spawn` to execute `yt-dlp`. Configure command arguments to include `--skip-download --write-subs --write-auto-subs --sub-langs \"en.*,en\" --sub-format \"vtt/srt/best\"`. Implement logic to dynamically add `--cookies-from-browser edge` by default, or use the value from `process.env.YT_DLP_COOKIES` if set. Similarly, add `--user-agent \"${process.env.YT_DLP_USER_AGENT}\"` if `process.env.YT_DLP_USER_AGENT` is defined. Create a unique temporary directory for each video ID to store subtitle files and ensure this directory is cleaned up after processing, regardless of success or failure.",
+            "dependencies": [],
+            "details": "Create a new utility file (e.g., `utils/ytDlpTranscript.js`) for `getTranscriptViaYtDlp`. Use `os.tmpdir()` and `path.join()` for temporary directory creation, and `fs.promises.mkdtemp` for unique directory names. Implement a `finally` block to ensure `fs.promises.rm` is called for cleanup. Capture `stdout` and `stderr` from the `yt-dlp` process for debugging. The function should return the path to the downloaded subtitle file or throw an error if no subtitles are found or `yt-dlp` fails.",
+            "status": "pending",
+            "testStrategy": "Manually execute `getTranscriptViaYtDlp` with a video ID and verify that a temporary directory is created, `yt-dlp` is spawned, subtitle files are downloaded, and the directory is cleaned up afterwards. Test with and without `YT_DLP_COOKIES` and `YT_DLP_USER_AGENT` environment variables set."
+          },
+          {
+            "id": 2,
+            "title": "Develop VTT/SRT File Parsing Utilities and Integrate into `getTranscriptViaYtDlp`",
+            "description": "Implement a new utility function `parseVttToText(filePath)` that reads a VTT file and converts its content into plain text, similar to the existing `parseSrtToText` function. Modify the `getTranscriptViaYtDlp` function (created in 16.1) to read the generated `.vtt` or `.srt` file from the temporary directory. Based on the file extension, call the appropriate parsing utility (`parseVttToText` or `parseSrtToText`) to extract the plain text transcript. The `getTranscriptViaYtDlp` function should now return the extracted plain text transcript.",
+            "dependencies": [
+              "16.1"
+            ],
+            "details": "The `parseVttToText` function should handle VTT timestamp formats and remove HTML tags or other VTT-specific metadata, leaving only the spoken text. Ensure robust error handling for file reading and parsing. The `getTranscriptViaYtDlp` function should determine the subtitle file type (VTT or SRT) based on the file name generated by `yt-dlp` before calling the parser.",
+            "status": "pending",
+            "testStrategy": "Create mock `.vtt` and `.srt` files with various content (including timestamps, speaker labels, and HTML tags if applicable) and test `parseVttToText` and `parseSrtToText` independently. Then, run `getTranscriptViaYtDlp` with a video ID and verify that the returned transcript is correctly parsed plain text."
+          },
+          {
+            "id": 3,
+            "title": "Integrate `yt-dlp` into `getVideoTranscript` with Fallback and Error Handling",
+            "description": "Modify the `getVideoTranscript()` function in `server.js` to call `getTranscriptViaYtDlp(videoId)` as the primary attempt for transcript extraction. If `getTranscriptViaYtDlp` successfully returns a transcript, use it. Implement a `try-catch` block around the `yt-dlp` call to gracefully handle errors (e.g., `yt-dlp` not found, execution failure, no subtitles found). If `yt-dlp` fails or returns no transcript, fall back to the existing `youtube-transcript` method. Ensure existing fallbacks are not removed. Add `console.error` for `yt-dlp` execution failures, file reading/parsing errors, and cases where no subtitles are found, including logging the specific `yt-dlp` command being executed for debugging.",
+            "dependencies": [
+              "16.1",
+              "16.2"
+            ],
+            "details": "The `getVideoTranscript` function should prioritize `yt-dlp`. If `getTranscriptViaYtDlp` throws an error or returns an empty/null transcript, log the issue and proceed to the `youtube-transcript` fallback. Use structured logging for `yt-dlp` command execution and any errors encountered during its process.",
+            "status": "pending",
+            "testStrategy": "Test `getVideoTranscript` with a video known to have `yt-dlp` compatible subtitles to ensure it uses `yt-dlp`. Test with a video where `yt-dlp` might fail (e.g., private video, or temporarily disable `yt-dlp` path) to ensure it correctly falls back to `youtube-transcript`. Verify error messages and `yt-dlp` command logs appear in the console for debugging."
+          },
+          {
+            "id": 4,
+            "title": "Conduct Initial Functional Testing and Validation of `yt-dlp` Integration",
+            "description": "Perform comprehensive manual testing to validate the end-to-end `yt-dlp` integration. Call `getVideoTranscript()` with various YouTube video IDs: a standard video with auto-generated subtitles, a video with official subtitles in VTT format, and a video with official subtitles in SRT format. Verify that the transcript is successfully extracted using `yt-dlp` and returned as plain text. Test the fallback mechanism by using a video where `yt-dlp` is expected to fail (e.g., a video with no subtitles, or by temporarily misconfiguring `yt-dlp` path) and confirm that the existing `youtube-transcript` method is used. Review console logs to ensure `yt-dlp` commands are correctly logged and error handling messages are informative.",
+            "dependencies": [
+              "16.3"
+            ],
+            "details": "Use a set of diverse YouTube video IDs for testing. Pay close attention to the format of the extracted transcript to ensure `parseVttToText` and `parseSrtToText` are working correctly. Confirm that temporary directories are created and cleaned up as expected during these tests. This subtask focuses on verifying the functional correctness of the integration.",
+            "status": "pending",
+            "testStrategy": "Execute `npm start` and manually trigger `getVideoTranscript` via API calls or a simple test script. Use `console.log` statements within the code to trace execution paths and verify which transcript method is being used. Check the server logs for `yt-dlp` command outputs and error messages."
+          },
+          {
+            "id": 5,
+            "title": "Code Review, Refinement, and Cleanup for `yt-dlp` Integration",
+            "description": "Conduct a thorough self-review or peer code review of all changes implemented for Task 16. Ensure code quality, adherence to project coding standards, clarity, and efficiency across `getTranscriptViaYtDlp`, parsing utilities, and `getVideoTranscript` modifications. Remove any temporary debugging code, unused variables, or console logs that are not intended for production. Verify that temporary directory cleanup is robust and reliable under all scenarios (success, failure, early exit). Ensure error messages are clear and consistent. Confirm that the solution is maintainable and extensible.",
+            "dependencies": [
+              "16.4"
+            ],
+            "details": "Focus on code readability, modularity, and error handling robustness. Check for potential resource leaks, especially related to child processes and file system operations. Ensure all `async/await` patterns are correctly implemented. Verify that the `yt-dlp` executable path is handled gracefully if not found. This is the final polish before considering the task complete.",
+            "status": "pending",
+            "testStrategy": "Perform a final manual test run after cleanup to ensure no functionality was inadvertently broken. Conduct a line-by-line code review focusing on best practices, error handling, and resource management."
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "title": "Add ASR Fallback for No Subtitles",
+        "description": "Integrate an audio download and transcription path using yt-dlp and pluggable ASR providers (OpenAI Whisper, AssemblyAI, Deepgram) as a fallback when no subtitles are available.",
+        "details": "Modify the central transcript extraction logic (e.g., within `getVideoTranscript()`) to include this ASR path as the final fallback mechanism, invoked only if all subtitle methods (including those from Task 11 and Task 16) fail. Implement the following:\n\n1.  **Audio Download with yt-dlp:**\n    *   Utilize `yt-dlp` to download the best available audio stream (`-f m4a/bestaudio`) for the given video ID.\n    *   Store the downloaded audio file in a temporary, per-video directory to avoid conflicts.\n    *   Ensure robust error handling for download failures and implement a reasonable timeout.\n    *   Implement cleanup logic to delete the temporary audio file after transcription is complete or if an error occurs.\n\n2.  **Pluggable Transcription System:**\n    *   Introduce an environment variable, `TRANSCRIBE_PROVIDER`, which can be set to `openai`, `assemblyai`, or `deepgram`.\n    *   Create a `transcribeAudio(filePath, provider)` function that acts as a dispatcher, calling the appropriate provider-specific transcription logic based on `TRANSCRIBE_PROVIDER`.\n\n3.  **OpenAI Whisper Integration:**\n    *   If `TRANSCRIBE_PROVIDER` is `openai`, implement a function to call the OpenAI Whisper API (`/v1/audio/transcriptions`).\n    *   The model used for transcription should be configurable via `OPENAI_WHISPER_MODEL` environment variable (default to `whisper-1`).\n    *   Require `OPENAI_API_KEY` for authentication.\n    *   Handle API responses, errors, and potential rate limits gracefully.\n\n4.  **AssemblyAI and Deepgram Placeholders:**\n    *   For `assemblyai` and `deepgram` providers, create placeholder functions (e.g., `transcribeWithAssemblyAI`, `transcribeWithDeepgram`).\n    *   These functions should check for the presence of their respective API keys (`ASSEMBLYAI_API_KEY`, `DEEPGRAM_API_KEY`). If keys are missing, they should log an error and return a clear message indicating that the provider is not configured or implemented.\n    *   If keys are present, they can initially return a 'not yet implemented' message, or a basic mock response, until full integration is planned.\n\n5.  **Output and Logging:**\n    *   All successful transcription paths should return the plain text transcript of the audio.\n    *   Log the duration of both the audio download and the transcription process for performance monitoring and debugging.\n    *   Ensure that if ASR fails, the overall `getVideoTranscript` function can still return an empty string or propagate an appropriate error, without crashing the application.",
+        "testStrategy": "1.  **ASR Success (OpenAI):** Test with a YouTube video that has no official or auto-generated subtitles, but clear audio. Configure `TRANSCRIBE_PROVIDER=openai` and provide a valid `OPENAI_API_KEY`. Verify that `yt-dlp` successfully downloads the audio, the Whisper API transcribes it, and the plain text transcript is returned.\n2.  **ASR Fallback (Placeholder Providers):** Test with the same video. Configure `TRANSCRIBE_PROVIDER` to `assemblyai` or `deepgram` without providing their respective API keys. Verify that the system correctly logs an error or returns a 'not configured/implemented' message for the ASR step, and the overall transcript function indicates failure for ASR.\n3.  **Subtitles Present (ASR Not Invoked):** Test with a video that *does* have subtitles (e.g., via `yt-dlp` or `youtube-transcript-api`). Verify that the ASR fallback path is *not* invoked, and the existing subtitle extraction works as expected.\n4.  **Audio Download Failure:** Simulate a `yt-dlp` audio download failure (e.g., by providing an invalid video ID or blocking network access) and verify that the system handles the error gracefully without crashing.\n5.  **Transcription API Failure:** Simulate an API error from the transcription service (e.g., by using an invalid `OPENAI_API_KEY` or triggering a rate limit) and verify graceful error handling and logging.\n6.  **Temporary File Cleanup:** After successful transcription or a failed attempt, verify that the temporary audio files downloaded by `yt-dlp` are correctly deleted from the file system.\n7.  **Performance:** Monitor the duration of audio download and transcription for typical video lengths to ensure that the implemented timeouts are reasonable and do not cause excessive delays.",
+        "status": "pending",
+        "dependencies": [
+          11,
+          16
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement yt-dlp Audio Download with Cleanup",
+            "description": "Develop the core logic for downloading audio from a given video ID using `yt-dlp`. This includes creating a temporary, per-video directory, utilizing `yt-dlp` with specific arguments (`-f m4a/bestaudio`), handling `cookies-from-browser` and user-agent environment variables, and ensuring robust error handling with timeouts. Crucially, implement initial cleanup logic to delete the temporary audio file after processing or on error.",
+            "dependencies": [],
+            "details": "Create a new utility function, e.g., `downloadAudio(videoId)`. Inside, use Node.js `child_process.spawn` to execute `yt-dlp`. Generate a unique temporary directory path for each video (e.g., using `os.tmpdir()` and a unique ID). Pass `--cookies-from-browser` if `process.env.YT_DLP_COOKIES` is set, and `--user-agent` if `process.env.YT_DLP_USER_AGENT` is set. Implement `try-finally` blocks or similar mechanisms to ensure the temporary directory and audio file are removed. Return the full path to the downloaded audio file on success.",
+            "status": "pending",
+            "testStrategy": "Test `downloadAudio()` with a valid YouTube video ID. Verify that an audio file is downloaded to a temporary directory, the directory is unique, and the file is deleted after the function completes (or on error). Test with a non-existent video ID to ensure error handling and no leftover files."
+          },
+          {
+            "id": 2,
+            "title": "Implement OpenAI Whisper Transcription",
+            "description": "Implement the specific logic for transcribing an audio file using the OpenAI Whisper API. This involves making a `multipart/form-data` POST request to `/v1/audio/transcriptions` using `axios` and `form-data`. Configure the model via `OPENAI_WHISPER_MODEL` (default `whisper-1`) and authenticate with `OPENAI_API_KEY`. Handle API responses, errors, and potential rate limits gracefully, returning the plain text transcript.",
+            "dependencies": [
+              "17.1"
+            ],
+            "details": "Create a function `transcribeWithOpenAI(filePath)`. Install `axios` and `form-data` if not already present (`npm install axios form-data`). Construct the `FormData` object with the audio file (read as a stream or buffer) and the model specified by `process.env.OPENAI_WHISPER_MODEL` or `whisper-1`. Make the API call, parse the JSON response, and extract the `text` field. Implement error handling for network issues, API errors (e.g., invalid key, rate limits), and ensure the function returns a string (transcript) or throws a specific error.",
+            "status": "pending",
+            "testStrategy": "Provide a small, valid audio file (e.g., a short `.m4a` or `.mp3`) and a valid `OPENAI_API_KEY`. Call `transcribeWithOpenAI()` and verify that a transcript is returned. Test with an invalid API key to ensure proper error handling and error propagation."
+          },
+          {
+            "id": 3,
+            "title": "Develop Pluggable ASR Dispatcher and Placeholders",
+            "description": "Create a central `transcribeAudio(filePath, provider)` dispatcher function that uses the `TRANSCRIBE_PROVIDER` environment variable to select the appropriate ASR service. Implement placeholder functions for `assemblyai` (`transcribeWithAssemblyAI`) and `deepgram` (`transcribeWithDeepgram`). These placeholders should check for their respective API keys (`ASSEMBLYAI_API_KEY`, `DEEPGRAM_API_KEY`) and, if missing, log an error and return a clear message indicating non-configuration. If keys are present, they should initially return a 'not yet implemented' message.",
+            "dependencies": [
+              "17.2"
+            ],
+            "details": "Define `transcribeAudio(filePath, provider)` which takes the audio file path and the provider string. Use a `switch` statement or `if/else if` chain based on `process.env.TRANSCRIBE_PROVIDER`. For `openai`, call `transcribeWithOpenAI(filePath)`. For `assemblyai` and `deepgram`, implement placeholder functions that check for the presence of their respective API keys. If keys are missing, log a warning and return a string like 'AssemblyAI API key not configured'. If keys are present, return 'AssemblyAI transcription not yet implemented'. Ensure consistent return types (string for transcript, or specific error messages).",
+            "status": "pending",
+            "testStrategy": "Set `TRANSCRIBE_PROVIDER` to `openai` and verify it correctly dispatches to `transcribeWithOpenAI`. Set `TRANSCRIBE_PROVIDER` to `assemblyai` (with and without `ASSEMBLYAI_API_KEY`) and verify the correct error/placeholder message is returned. Repeat for `deepgram`."
+          },
+          {
+            "id": 4,
+            "title": "Integrate ASR as Final Fallback in getVideoTranscript",
+            "description": "Modify the existing `getVideoTranscript()` function to incorporate the ASR path as the *final* fallback mechanism. This path should only be invoked if all other subtitle extraction methods (including those from Task 11 and Task 16) have failed to yield a transcript. Orchestrate the audio download, ASR transcription, and ensure comprehensive cleanup of temporary files. Log the duration of both download and transcription processes. Ensure the overall function handles ASR failures gracefully, returning an empty string or propagating a specific error without crashing the application.",
+            "dependencies": [
+              "17.1",
+              "17.3"
+            ],
+            "details": "Within `getVideoTranscript()`, after attempts to get subtitles via `yt-dlp` (Task 16) and other methods (Task 11) have failed, add a `try-catch-finally` block for the ASR fallback. Call `downloadAudio(videoId)` (from 17.1) to get the audio file path. Then, call `transcribeAudio(audioFilePath, process.env.TRANSCRIBE_PROVIDER)` (from 17.3). Use a `finally` block to ensure `fs.unlinkSync(audioFilePath)` and `fs.rmdirSync(tempDirPath, { recursive: true })` are called on the downloaded audio file and its temporary directory. Log start/end times for download and transcription processes. If ASR fails (e.g., throws an error), log the error and return an empty string or a specific error object, ensuring the application does not crash.",
+            "status": "pending",
+            "testStrategy": "Test with a video known to have no subtitles (official or auto-generated). Configure `TRANSCRIBE_PROVIDER=openai` and a valid `OPENAI_API_KEY`. Verify that the ASR path is triggered, audio is downloaded, transcribed, and the temporary file/directory is cleaned up. Test with ASR configured but failing (e.g., invalid API key, or a video with no discernible speech) to ensure graceful fallback to an empty transcript and no application crash."
+          },
+          {
+            "id": 5,
+            "title": "Manual Validation and Refinement",
+            "description": "Perform comprehensive manual testing of the integrated ASR fallback system. Validate the end-to-end flow, including successful audio download, accurate transcription via OpenAI Whisper, and correct handling of placeholder providers. Verify that temporary files are consistently cleaned up. Review logging for clarity and completeness, and refine error messages to be user-friendly and informative. Address any minor issues or edge cases identified during testing.",
+            "dependencies": [
+              "17.4"
+            ],
+            "details": "Conduct manual tests with various scenarios: 1. A video with no subtitles, ASR enabled and working (OpenAI). 2. A video with no subtitles, ASR enabled but misconfigured (e.g., missing `OPENAI_API_KEY`). 3. A video with existing subtitles (ensure ASR is *not* triggered and the existing subtitles are returned). 4. Test with `TRANSCRIBE_PROVIDER` set to `assemblyai` or `deepgram` to confirm placeholder behavior. 5. Manually check the temporary directory after runs to ensure all files are cleaned up. 6. Review console logs for download/transcription durations and ensure error messages are clear and helpful. Refine any error messages or logging statements for clarity and consistency.",
+            "status": "pending",
+            "testStrategy": "Execute the application with different YouTube video IDs and environment configurations. Manually inspect the returned transcript, console logs, and the file system (temporary directories) to confirm expected behavior for success, various failure modes, and cleanup scenarios. Pay attention to edge cases like very short videos, videos with no speech, or network interruptions during download/transcription."
+          }
+        ]
+      },
+      {
+        "id": 18,
+        "title": "Configure Environment Variables and Update Documentation for yt-dlp and ASR",
+        "description": "Update the project's environment configuration file and README documentation to include settings for yt-dlp and ASR providers, ensuring users can properly set up and test these new features.",
+        "details": "1.  **Update `env.example`**: Add the following environment variables with placeholder values and clear comments explaining their purpose and expected formats:\n    *   `YT_DLP_PATH`: Path to the yt-dlp executable (e.g., `/usr/local/bin/yt-dlp` or `C:\\yt-dlp\\yt-dlp.exe`)\n    *   `YT_DLP_COOKIES`: Specifies cookie source (e.g., `browser:edge`, `browser:chrome`, `file:/path/to/cookies.txt`)\n    *   `YT_DLP_SUB_LANGS`: Comma-separated list of preferred subtitle languages (e.g., `en.*,en`)\n    *   `YT_DLP_SUB_FORMATS`: Preferred subtitle formats (e.g., `vtt/srt/best`)\n    *   `YT_DLP_USER_AGENT`: Optional user agent string for yt-dlp requests\n    *   `TRANSCRIBE_PROVIDER`: Specifies the ASR provider (e.g., `openai`, `assemblyai`, `deepgram`)\n    *   `OPENAI_API_KEY`: API key for OpenAI services\n    *   `OPENAI_WHISPER_MODEL`: Specific Whisper model to use (e.g., `whisper-1`)\n    *   `ASSEMBLYAI_API_KEY`: API key for AssemblyAI\n    *   `DEEPGRAM_API_KEY`: API key for Deepgram\n2.  **Update `README.md`**: Add a new 'Setup and Configuration' or 'Environment Variables' section that includes:\n    *   A brief explanation of how to configure the new `yt-dlp` and ASR-related environment variables.\n    *   Specific guidance on using `YT_DLP_COOKIES`, particularly for Windows Edge browser cookie extraction.\n    *   Example `yt-dlp` commands for testing subtitle listing (`yt-dlp --list-subs <video_url>`) and auto-subtitle writing (`yt-dlp --write-auto-subs --skip-download <video_url>`).\n    *   A note clarifying that the YouTube Data API cannot download third-party captions with an API key alone, managing user expectations regarding caption availability.",
+        "testStrategy": "1.  **Verify `env.example`**: Check that `env.example` contains all specified environment variables with clear, concise comments explaining their purpose and valid values.\n2.  **Verify `README.md` Content**: Confirm the `README.md` includes the new setup section. Ensure it clearly explains the `yt-dlp` and ASR environment variables, provides correct `yt-dlp` test commands, and includes the note about YouTube Data API limitations for third-party captions.\n3.  **Clarity and Usability**: Review the updated documentation for clarity, accuracy, and ease of understanding for a new user attempting to set up the project with these new features.",
+        "status": "pending",
+        "dependencies": [
+          16,
+          17
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Define yt-dlp and ASR Environment Variables in `env.example`",
+            "description": "Add all specified `YT_DLP_PATH`, `YT_DLP_COOKIES`, `YT_DLP_SUB_LANGS`, `YT_DLP_SUB_FORMATS`, `YT_DLP_USER_AGENT`, `TRANSCRIBE_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_WHISPER_MODEL`, `ASSEMBLYAI_API_KEY`, and `DEEPGRAM_API_KEY` to `env.example`. Include placeholder values and clear comments for each.",
+            "dependencies": [],
+            "details": "Open `env.example` and append the new environment variables. For each variable, provide a placeholder value (e.g., empty string, example path) and a concise comment explaining its purpose, expected format, and any specific examples (e.g., `/usr/local/bin/yt-dlp`, `browser:edge`, `en.*,en`). Ensure the comments are clear enough for a new user to understand.",
+            "status": "pending",
+            "testStrategy": "Manually verify that `env.example` contains all specified variables with correct placeholder values and clear, accurate comments."
+          },
+          {
+            "id": 2,
+            "title": "Document yt-dlp and ASR Setup in `README.md`",
+            "description": "Create a new 'Setup and Configuration' or 'Environment Variables' section in `README.md`. Explain how to configure the new `yt-dlp` and ASR environment variables. Provide specific guidance on `YT_DLP_COOKIES`, including details for Windows Edge browser cookie extraction. Include example `yt-dlp` commands for testing subtitle listing and auto-subtitle writing.",
+            "dependencies": [
+              "18.1"
+            ],
+            "details": "Locate an appropriate section in `README.md` (e.g., 'Configuration', 'Environment Variables') or create a new one. Write clear, concise instructions on how to set up the `yt-dlp` and ASR-related environment variables. For `YT_DLP_COOKIES`, specifically detail how to use `browser:edge` and `browser:chrome` for cookie extraction, with a focus on Windows users. Add the example `yt-dlp` commands: `yt-dlp --list-subs <video_url>` and `yt-dlp --write-auto-subs --skip-download <video_url>`.",
+            "status": "pending",
+            "testStrategy": "Review `README.md` to ensure the new section is present, well-formatted, and accurately describes the setup process for yt-dlp and ASR. Verify the cookie guidance is clear and the example commands are correct."
+          },
+          {
+            "id": 3,
+            "title": "Add YouTube Data API Limitations Note to `README.md`",
+            "description": "Append a brief note to `README.md` clarifying that the YouTube Data API cannot download third-party captions with an API key alone, managing user expectations regarding caption availability.",
+            "dependencies": [
+              "18.2"
+            ],
+            "details": "Add a short, clear note within or near the new 'Setup and Configuration' section, or in a dedicated 'Limitations' section if appropriate. The note should explicitly state that the YouTube Data API does not support downloading third-party captions using only an API key, and that yt-dlp is necessary for such cases.",
+            "status": "pending",
+            "testStrategy": "Confirm the presence and clarity of the YouTube Data API limitations note in `README.md`."
+          },
+          {
+            "id": 4,
+            "title": "Verify `package.json` Dependencies Alignment with Documentation",
+            "description": "Perform a quick review of `package.json` to ensure that any dependencies mentioned or implied by the new `yt-dlp` and ASR documentation are correctly listed or that there are no discrepancies. This is primarily a sanity check to ensure the documentation doesn't imply missing npm packages.",
+            "dependencies": [
+              "18.3"
+            ],
+            "details": "Open `package.json` and review the `dependencies` and `devDependencies` sections. Cross-reference with the updated `README.md` and `env.example` to ensure that if any new npm packages were implicitly required by the new features (e.g., specific ASR SDKs if they were npm packages, which they are not in this context), they are listed. Confirm that external tools like `yt-dlp` are clearly stated as external requirements in the documentation, not npm dependencies.",
+            "status": "pending",
+            "testStrategy": "Manually inspect `package.json` and compare it against the documentation to ensure no inconsistencies or missing dependency declarations related to the new features."
+          }
+        ]
+      },
+      {
+        "id": 19,
+        "title": "Refactor Transcript Extraction Flow and Telemetry",
+        "description": "Refactor the getVideoTranscript function to implement a prioritized sequence of transcript extraction methods, normalize their outputs, and add detailed telemetry for each attempt.",
+        "details": "Implement a robust and ordered transcript extraction flow within the `getVideoTranscript(videoId)` function. This involves:1.  **Prioritized Flow Implementation**: Modify `getVideoTranscript(videoId)` to sequentially attempt transcript extraction using the following order:\n    *   `yt-dlp` subtitles (leveraging Task 16's integration)\n    *   `python youtube_transcript_api` (assuming existing integration)\n    *   `youtube-transcript` (JS library, assuming existing integration)\n    *   `youtube-captions-scraper` (assuming existing integration)\n    *   `Apify` (assuming existing integration)\n    *   ASR fallback (leveraging Task 17's integration)\n    Each attempt should proceed to the next method only if the current one fails to return a valid transcript or encounters an unrecoverable error.\n2.  **Output Normalization**: Ensure all successful transcript extraction paths (from `yt-dlp`, Python API, JS libraries, Apify, and ASR) return a consistent plain text string format. This may involve stripping HTML tags, timestamps, speaker labels, or other non-content metadata to provide a clean, continuous text.\n3.  **Structured Logging and Telemetry**: Implement comprehensive structured logging for each attempt within the `getVideoTranscript` flow. For each method attempt, log the following details:\n    *   `method_name`: (e.g., 'yt_dlp', 'python_api', 'js_lib', 'apify', 'asr')\n    *   `status`: ('success' or 'failure')\n    *   `duration_ms`: Time taken for the specific attempt in milliseconds.\n    *   `error_message`: (if status is 'failure', capture the last error message or stack trace).\n    *   `video_id`: The ID of the video being processed.\n    *   `attempt_order`: The sequence number of the attempt (e.g., 1st, 2nd).\n    Use a consistent logging library or approach (e.g., a dedicated logger instance) for this.\n4.  **`transcriptStatus` Update**: Modify the logic that sets the `transcriptStatus` (e.g., in the database or response object) to accurately reflect the *successful* method used. Examples of status values could be 'subs_ytdlp', 'subs_python', 'subs_js', 'subs_apify', 'asr_whisper', 'asr_assemblyai', 'asr_deepgram'. If all methods fail, the status should clearly indicate 'no_transcript_found' or 'transcript_failed'.",
+        "testStrategy": "1.  **Full Flow Success (yt-dlp)**: Test with a standard YouTube video known to have `yt-dlp` extractable subtitles. Verify `yt-dlp` is attempted first, succeeds, and the correct `transcriptStatus` (e.g., 'subs_ytdlp') is set. Check logs for `yt_dlp` success and no subsequent attempts.\n2.  **Fallback to Python API**: Test with a video where `yt-dlp` might fail (e.g., due to geo-restrictions or specific format issues), but `youtube_transcript_api` (Python) is expected to succeed. Verify `yt-dlp` fails, Python API succeeds, and `transcriptStatus` reflects Python API. Check logs for both attempts.\n3.  **Fallback to JS Library**: Test with a video where `yt-dlp` and Python API fail, but a JS library (e.g., `youtube-transcript`) succeeds. Verify the correct sequence and `transcriptStatus`.\n4.  **Fallback to Apify**: Test with a video where all direct subtitle methods fail, but Apify is expected to succeed. Verify the correct sequence and `transcriptStatus`.\n5.  **ASR Fallback Success**: Test with a video known to have *no* subtitles, but clear audio. Verify all subtitle methods are attempted and fail, then ASR (Task 17) is invoked and succeeds. Check `transcriptStatus` (e.g., 'asr_whisper' or 'asr_assemblyai').\n6.  **Complete Failure**: Test with a video where no transcript can be obtained by any method (e.g., private video, no audio, no subtitles). Verify all methods are attempted and fail, and `transcriptStatus` indicates 'no_transcript_found' or similar.\n7.  **Output Normalization**: For each successful test case, inspect the returned transcript to ensure it is plain text, free of HTML, timestamps, or other non-content metadata.\n8.  **Telemetry Verification**: For all test cases, review the application logs to confirm structured logging entries for each attempt, including `method_name`, `status`, `duration_ms`, `error_message` (if applicable), `video_id`, and `attempt_order`.",
+        "status": "pending",
+        "dependencies": [
+          16,
+          17,
+          18
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 20,
+        "title": "Add VTT Parsing Utility and Tests",
+        "description": "Implement a utility function to parse VTT/SRT strings into clean plain text, removing timestamps and headers, and create unit tests to validate its functionality.",
+        "details": "Create a new utility function, `parseVttToText(vttString)`, preferably in a new module like `utils/transcriptParser.js` or directly in `server.js` if it's a small, isolated utility. This function should:\n1.  Identify and remove VTT/SRT headers (e.g., 'WEBVTT', '1', '00:00:00,000 --> 00:00:05,000').\n2.  Correctly handle multi-line cue text, joining them into a single coherent string per cue, and then concatenating all cue texts into a continuous plain text string.\n3.  Filter out non-text elements such as notes, style blocks, and voice tags if they are present in the VTT/SRT input.\n4.  Ensure the final output is a continuous block of plain text, preserving the original order of cues.\nConsider edge cases such as empty VTT strings, VTT with only headers, or VTT with malformed cues. This utility will be crucial for cleaning up raw transcript data obtained from sources that provide VTT/SRT formats.",
+        "testStrategy": "Create a dedicated unit test file (e.g., `test/transcriptParser.test.js`) using a lightweight test harness. Prepare several sample VTT and SRT strings covering various scenarios:\n1.  A basic VTT string with single-line cues.\n2.  A VTT string with multi-line cues that need concatenation.\n3.  A VTT string including headers, timestamps, and cue text.\n4.  A VTT string containing notes, style blocks, or voice tags to ensure they are correctly stripped.\n5.  An empty VTT string and a VTT string with only headers (no cues).\nFor each sample, assert that the `parseVttToText` function returns the expected clean plain text. Verify that no timestamps or headers remain, and that the text order is preserved correctly. Ensure multi-line cues are properly joined.",
+        "status": "pending",
+        "dependencies": [
+          11
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement VTT/SRT Parsing Utility Functions",
+            "description": "Create and implement the core utility functions `parseVttToText(vttString)` and `parseSrtToText(srtString)` in a new module, e.g., `utils/transcriptParser.js`. These functions should parse the input string, remove VTT/SRT headers, timestamps, and non-text elements (like notes, style blocks, voice tags), and concatenate multi-line cue texts into a continuous plain text string. Ensure both functions are exported for external use.",
+            "dependencies": [],
+            "details": "Create `utils/transcriptParser.js`. Implement `parseVttToText` and `parseSrtToText`. Use regular expressions or string manipulation to identify and remove headers (e.g., 'WEBVTT', '1'), timestamps (e.g., '00:00:00,000 --> 00:00:05,000'), and potential metadata lines. For cue text, iterate through lines, identify text lines (those not matching header/timestamp patterns), and join them. Handle edge cases like empty strings, strings with only headers, or malformed cues by returning an empty string or gracefully handling errors. Export both functions using `module.exports = { parseVttToText, parseSrtToText };`.",
+            "status": "pending",
+            "testStrategy": "Manual inspection of the function logic to ensure it covers the specified parsing rules."
+          },
+          {
+            "id": 2,
+            "title": "Create Unit Tests for VTT/SRT Parsing Utilities",
+            "description": "Develop a dedicated unit test file, `test/test-parse-subtitles.js`, to validate the functionality of `parseVttToText` and `parseSrtToText`. Include various sample VTT and SRT strings covering different scenarios and assert the expected plain text output.",
+            "dependencies": [
+              "20.1"
+            ],
+            "details": "Create `test/test-parse-subtitles.js`. Import the parsing functions from `utils/transcriptParser.js`. Define several test cases: a basic VTT/SRT string with single-line cues, a string with multi-line cues requiring concatenation, a string with headers only, an empty string, and a string with various non-text elements (e.g., notes, style tags). For each test case, call the respective parsing function and use `console.assert` or a similar lightweight assertion method to verify that: 1) no timestamps or headers remain, 2) the text order is preserved, 3) multi-line cues are correctly joined, and 4) non-text elements are filtered out. Print success/failure messages for each test.",
+            "status": "pending",
+            "testStrategy": "Run the test file directly via Node.js to observe assertion outcomes."
+          },
+          {
+            "id": 3,
+            "title": "Configure NPM Script for Subtitle Tests",
+            "description": "Add a new script to `package.json` that allows for easy execution of the subtitle parsing unit tests using `npm run test:subtitles`.",
+            "dependencies": [
+              "20.2"
+            ],
+            "details": "Open `package.json`. Locate the `scripts` section. Add a new entry: `'test:subtitles': 'node test/test-parse-subtitles.js'`. This will enable running the tests with a simple `npm run test:subtitles` command from the terminal.",
+            "status": "pending",
+            "testStrategy": "Execute `npm run test:subtitles` to ensure the script correctly invokes the test file and displays its output."
+          },
+          {
+            "id": 4,
+            "title": "Execute Subtitle Tests and Refine Parsing Logic",
+            "description": "Run the newly configured subtitle parsing tests and iteratively debug and refine the `parseVttToText` and `parseSrtToText` utility functions until all test cases pass successfully.",
+            "dependencies": [
+              "20.3"
+            ],
+            "details": "Execute `npm run test:subtitles`. Carefully review the output for any failed assertions. Based on failures, return to `utils/transcriptParser.js` to identify and correct bugs in the parsing logic. This may involve adjusting regular expressions, refining string splitting/joining, or improving edge case handling. Repeat the test execution and refinement cycle until all tests pass, ensuring robust parsing functionality.",
+            "status": "pending",
+            "testStrategy": "Verify that `npm run test:subtitles` completes without any assertion failures and all test cases are reported as passing."
+          }
+        ]
+      },
+      {
+        "id": 21,
+        "title": "Frontend UX for Transcript Pipeline Enhancements",
+        "description": "Update the frontend to display the transcript extraction method used, add a yt-dlp configuration tooltip with a health check button, and enable downloading of raw SRT/VTT subtitle files.",
+        "details": "Implement the following user experience enhancements for the transcript pipeline:\n\n1.  **Transcript Method Notification:**\n    *   Modify the results display area (e.g., near the generated transcript) to clearly indicate which transcript extraction path was successfully used (e.g., \"Transcript via: yt-dlp subs\", \"Transcript via: Python API\", \"Transcript via: Scraper\", \"Transcript via: ASR\", \"No transcript available\"). This information will be provided by the backend's `transcriptStatus` field (from Task 19).\n    *   Ensure the display is concise and user-friendly.\n\n2.  **yt-dlp Configuration & Health Check:**\n    *   Add a small help tooltip (e.g., a '?' icon) near relevant settings or the transcript section. On hover or click, this tooltip should explain how to enable Edge/Chrome cookie use with `yt-dlp` (referencing the `YT_DLP_COOKIES` environment variable from Task 18).\n    *   Implement a \"Test yt-dlp Availability\" button. This button should trigger a new backend endpoint (e.g., `/api/yt-dlp-health-check`) that attempts to execute a simple `yt-dlp` command (e.g., `yt-dlp --version`) and returns its status.\n    *   Display the result of the health check to the user (e.g., \"yt-dlp is available and configured\" or \"yt-dlp not found/configured correctly\").\n\n3.  **Raw Subtitle Download:**\n    *   Extend the existing download options (leveraging Task 8 and Task 15) to include a new option: \"Download Raw Subtitles (SRT/VTT)\".\n    *   This download option should only be visible and enabled if raw SRT/VTT data is available for the current video (the backend, via Task 19, should indicate this availability).\n    *   Create a new backend endpoint (e.g., `/api/download-raw-subs/:videoId`) that serves the raw SRT or VTT content. This endpoint should set appropriate `Content-Type` (e.g., `text/srt`, `text/vtt`) and `Content-Disposition` headers to prompt a file download with the correct extension (e.g., `.srt`, `.vtt`). The raw content will be provided by the backend's transcript extraction process (Task 16 and 19).",
+        "testStrategy": "1.  **Transcript Method Notification:**\n    *   Test with a YouTube video known to have `yt-dlp` extractable subtitles. Verify the UI displays \"Transcript via: yt-dlp subs\" or similar.\n    *   Test with a video where `yt-dlp` fails but `python youtube_transcript_api` succeeds. Verify the UI displays \"Transcript via: Python API\" or similar.\n    *   Test with a video where no transcript can be found by any method. Verify the UI displays \"No transcript available\" or similar.\n\n2.  **yt-dlp Configuration & Health Check:**\n    *   Verify the help tooltip appears correctly and contains accurate instructions for `yt-dlp` cookie setup.\n    *   With `yt-dlp` correctly installed and configured on the backend, click the \"Test yt-dlp Availability\" button and confirm a success message is displayed.\n    *   Temporarily misconfigure `yt-dlp`'s path or remove it from the backend environment. Click the button and verify an appropriate failure message is displayed.\n\n3.  **Raw Subtitle Download:**\n    *   Test with a video known to have `yt-dlp` extractable subtitles (e.g., with auto-generated or embedded captions). Verify the \"Download Raw Subtitles (SRT/VTT)\" option is visible and enabled.\n    *   Click the download button and verify that an `.srt` or `.vtt` file is downloaded. Open the downloaded file and confirm it contains the raw subtitle data, including timestamps and cue numbers.\n    *   Test with a video where no raw subtitles are available (e.g., a very old video without any captions). Verify the \"Download Raw Subtitles\" option is not visible or is disabled.",
+        "status": "pending",
+        "dependencies": [
+          3,
+          8,
+          16,
+          18,
+          19
+        ],
+        "priority": "low",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Display Transcript Extraction Method in UI",
+            "description": "Modify the results display area in the frontend to clearly indicate which transcript extraction path was successfully used (e.g., 'Transcript via: yt-dlp subs', 'Transcript via: Python API', 'No transcript available'). This information will be sourced from the backend's `transcriptStatus` field.",
+            "dependencies": [],
+            "details": "Locate the appropriate section in `public/script.js` where transcript results are displayed. Access the `transcriptStatus` field from the backend response (e.g., `data.transcriptStatus`). Map this status to a user-friendly string. Create a new `<span>` or `<div>` element to display this string concisely near the generated transcript. Ensure the element is added to `public/index.html` or dynamically created in `public/script.js`. Add basic styling for this label in `public/styles.css`.",
+            "status": "pending",
+            "testStrategy": "Test with videos that trigger different `transcriptStatus` values (e.g., `subs_ytdlp`, `api_python`, `none`). Verify the correct message is displayed for each scenario."
+          },
+          {
+            "id": 2,
+            "title": "Implement yt-dlp Cookie Configuration Tooltip",
+            "description": "Add a small help tooltip (e.g., a '?' icon) near relevant settings or the transcript section. On hover or click, this tooltip should explain how to enable Edge/Chrome cookie use with `yt-dlp`, referencing the `YT_DLP_COOKIES` environment variable.",
+            "dependencies": [],
+            "details": "In `public/index.html` or dynamically in `public/script.js`, add a `<span>` or `<i>` element with a '?' icon. Implement a hover or click event listener in `public/script.js` to display a small pop-up or `div` containing the explanation. The explanation should guide the user on setting the `YT_DLP_COOKIES` environment variable to the appropriate browser user data path (e.g., `C:\\Users\\YourUser\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default`). Add necessary CSS in `public/styles.css` for the tooltip's appearance and hover/click effects.",
+            "status": "pending",
+            "testStrategy": "Hover over or click the tooltip icon and verify that the explanation text appears correctly and is legible. Ensure the tooltip is visually unobtrusive when not active."
+          },
+          {
+            "id": 3,
+            "title": "Implement yt-dlp Health Check Button and Endpoint",
+            "description": "Add a 'Test yt-dlp Availability' button to the frontend. Implement a new backend endpoint (`/api/yt-dlp-health-check`) that attempts to execute a simple `yt-dlp --version` command. Display the result of this health check to the user in the frontend (e.g., 'yt-dlp is available and configured' or 'yt-dlp not found/configured correctly').",
+            "dependencies": [
+              "21.2"
+            ],
+            "details": "Frontend (`public/script.js`, `public/index.html`): Add a button element. Attach an event listener to this button to make an AJAX request to the new `/api/yt-dlp-health-check` endpoint. Display the response message in a designated area near the button. Backend (`server.js`): Create a new GET endpoint `/api/yt-dlp-health-check`. Use Node.js `child_process.exec` to run `yt-dlp --version`. Handle both success (return a success message) and failure (e.g., `yt-dlp` not found in PATH, return an error message). Return JSON responses.",
+            "status": "pending",
+            "testStrategy": "Click the 'Test yt-dlp Availability' button. Verify a success message is displayed if `yt-dlp` is installed and accessible. If `yt-dlp` is not installed or not in the system's PATH, verify an appropriate failure message is displayed."
+          },
+          {
+            "id": 4,
+            "title": "Enable Raw SRT/VTT Subtitle Download",
+            "description": "Extend the existing download options to include a new option: 'Download Raw Subtitles (SRT/VTT)'. This option should only be visible and enabled if raw SRT/VTT data is available for the current video. Create a new backend endpoint (`/api/download-raw-subs/:videoId`) that serves the raw SRT or VTT content with appropriate `Content-Type` and `Content-Disposition` headers.",
+            "dependencies": [],
+            "details": "Frontend (`public/script.js`, `public/index.html`): In the section where download options are displayed, add a new link or button for 'Download Raw Subtitles (SRT/VTT)'. Before displaying/enabling, check the backend response for an indicator of raw subtitle availability (e.g., a flag from Task 19). Construct the download URL using the new backend endpoint: `/api/download-raw-subs/${videoId}`. Backend (`server.js`): Create a new GET endpoint `/api/download-raw-subs/:videoId`. Retrieve the raw SRT/VTT content for the given `videoId` (this content should be accessible via Task 19). Set `res.setHeader('Content-Type', 'text/srt')` or `text/vtt` and `res.setHeader('Content-Disposition', 'attachment; filename=\"video_subs.srt\"')` or `.vtt`. Send the raw content as the response.",
+            "status": "pending",
+            "testStrategy": "Test with a video known to have raw SRT/VTT available (e.g., from `yt-dlp` extraction). Verify the download option appears and clicking it downloads a valid SRT/VTT file. Test with a video where raw subtitles are not available; verify the option is hidden or disabled."
+          },
+          {
+            "id": 5,
+            "title": "Frontend UI Polish and Integration",
+            "description": "Apply minor styling adjustments in `public/styles.css` to ensure all newly added labels, tooltips, and buttons (from subtasks 21.1, 21.2, 21.3, 21.4) are visually consistent and well-integrated with the existing UI. Ensure minimal changes to `public/index.html` and `public/script.js` for styling purposes, preferring CSS.",
+            "dependencies": [
+              "21.1",
+              "21.2",
+              "21.3",
+              "21.4"
+            ],
+            "details": "Review `public/styles.css` and add/modify rules for the new elements. This might include adjusting margins, padding, font sizes, colors, and positioning for the transcript method label, the yt-dlp tooltip icon, the health check button, and the raw subtitle download link. Focus on creating a cohesive and user-friendly appearance. Ensure responsiveness and cross-browser compatibility for these new elements.",
+            "status": "pending",
+            "testStrategy": "Visually inspect the entire UI after implementing all features. Check alignment, spacing, and overall aesthetic of the new elements. Test on different screen sizes and browsers to ensure responsiveness and consistent display."
+          }
+        ]
+      },
+      {
+        "id": 22,
+        "title": "Remove Non-Viable YouTube API Caption Download Path",
+        "description": "Remove the non-viable YouTube Data API v3 caption download path, replacing it with a simple check for caption existence and updating logs to reflect that API key-based caption content download is not supported for third-party content.",
+        "details": "Modify the existing YouTube Data API integration to remove the attempt to download caption content directly via the `youtube/v3/captions` endpoint using an API key. This endpoint is known not to provide caption content for third-party videos. Instead, update the logic to only check for the presence of caption tracks (e.g., via `contentDetails.caption.status` in the video metadata) to inform the system if captions exist, without attempting to retrieve their content.\n\nUpdate relevant logging statements, particularly where caption retrieval failures might occur, to explicitly state that 'YouTube Data API does not provide caption content for third-party videos via API key; attempting alternative methods.' or similar. Ensure that the overall transcript acquisition flow, as defined in Task 19 (Refactor Transcript Extraction Flow and Telemetry), continues to correctly prioritize and utilize `yt-dlp` (Task 16) and ASR (Task 17) as robust fallbacks for obtaining transcript content.",
+        "testStrategy": "1. Verify that no API calls are made to `youtube/v3/captions` using the API key for content retrieval. Use network monitoring or code review to confirm.\n2. Test with a YouTube video that has captions but is from a third-party source (i.e., not owned by the API key's channel). Verify that the system correctly identifies that captions exist (the 'caption tracks exist' check passes) but does not attempt to download them via the API.\n3. Check application logs for the updated messages clarifying that API key-based caption content download is not supported for third-party content.\n4. For the same third-party video, confirm that a transcript is successfully acquired via the `yt-dlp` integration (Task 16) or the ASR fallback (Task 17), demonstrating that the removal of the API caption path does not break overall transcript acquisition and the fallbacks are correctly engaged.",
+        "status": "pending",
+        "dependencies": [
+          2,
+          16,
+          17,
+          19
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Remove YouTube Data API v3 Caption Content Retrieval",
+            "description": "Identify and remove all code paths that attempt to download caption content directly using the YouTube Data API v3 `youtube/v3/captions` endpoint. This includes removing any associated API calls, data parsing, and storage logic specifically for caption *content* obtained via this method.",
+            "dependencies": [],
+            "details": "Search the codebase for `youtube/v3/captions` or similar API calls related to fetching caption *content*. Remove the `axios` calls or similar HTTP requests targeting this endpoint. Ensure that any variables or data structures previously populated by this content are no longer used or are removed. Focus on `server.js` and any related helper functions that were specifically designed to retrieve caption content via the API key.",
+            "status": "pending",
+            "testStrategy": "Code review to confirm no calls to `youtube/v3/captions` are present. Run unit tests for the YouTube API integration to ensure no regressions."
+          },
+          {
+            "id": 2,
+            "title": "Implement Caption Existence Check and Update Logging",
+            "description": "Modify the YouTube Data API integration to only check for the *presence* of caption tracks (e.g., via `contentDetails.caption.status` in video metadata) without attempting to retrieve their content. Update relevant logging statements, especially in the `/api/process` flow, to explicitly state that 'YouTube Data API does not provide caption content for third-party videos via API key; attempting alternative methods.' or similar. Ensure the overall transcript acquisition flow continues to prioritize `yt-dlp` and ASR.",
+            "dependencies": [
+              "22.1"
+            ],
+            "details": "In the `getVideoMetadata` function or where video metadata is processed, ensure that `contentDetails.caption.status` is still accessed to determine if captions exist. Remove any logic that would then proceed to try and download content based on this status via the API key. Locate logging statements related to caption retrieval failures or attempts and modify them to reflect the new policy. Specifically, ensure the `/api/process` endpoint's logic correctly handles the absence of API-provided caption content and falls back to `yt-dlp` or ASR as per Task 19.",
+            "status": "pending",
+            "testStrategy": "1. Test with a YouTube video that has captions but is from a third-party source. Verify that the system logs the updated message about API key limitations and proceeds to use `yt-dlp` or ASR. 2. Test with a video that has no captions to ensure the `contentDetails.caption.status` check still functions correctly."
+          },
+          {
+            "id": 3,
+            "title": "Remove Unused Helpers and Run Linting",
+            "description": "Identify and delete any helper functions, modules, or utility files that are no longer used after the removal of the YouTube Data API v3 caption content download path. After code modifications, run the project's linter to ensure code quality, consistency, and to catch any new issues introduced.",
+            "dependencies": [
+              "22.2"
+            ],
+            "details": "Review the files modified in subtasks 22.1 and 22.2. Look for any functions or imports that are now dead code. For example, if there was a specific helper function `getCaptionContentFromAPI()`, it should now be removed. Run `npm run lint` or the equivalent linting command for the project. Address any warnings or errors reported by the linter.",
+            "status": "pending",
+            "testStrategy": "Verify that no unused files or functions remain in the codebase via code review. Run the linter and confirm that no new linting errors or warnings are introduced, and ideally, existing ones are maintained or reduced."
+          }
+        ]
+      },
+      {
+        "id": 23,
+        "title": "Add CI Smoke Test and Local Script for Transcript Pipeline",
+        "description": "Create a Node.js script to serve as a CI smoke test and local development tool for the transcript pipeline, asserting correct output for videos with and without subtitles.",
+        "details": "Develop a dedicated Node.js script (e.g., `scripts/test-transcript-pipeline.js`) that leverages the `getVideoTranscript` function to validate its functionality. The script should include:\n1.  **Test Case 1 (Video with Auto-Subs):** Call `getVideoTranscript` with a known public YouTube video ID that has English auto-generated subtitles. Assert that the returned transcript is non-empty and contains expected keywords or a reasonable length.\n2.  **Test Case 2 (Video with No Subs, ASR Path):** Call `getVideoTranscript` with a video ID known to have no pre-existing subtitles. Assert that the ASR (Automatic Speech Recognition) path is triggered and produces a non-empty transcript, provided the necessary ASR provider key is configured (skip this test if the key is absent).\n3.  **Error Handling:** Ensure the script gracefully handles errors and provides clear output indicating success or failure for each test case.\n4.  **Documentation:** Add a section to the project's `README.md` or a dedicated `TESTING.md` file detailing how to run this script, specifically including instructions for Windows PowerShell users.",
+        "testStrategy": "1.  Execute the `test-transcript-pipeline.js` script locally and verify that both test cases (auto-subs and ASR path) pass successfully.\n2.  For the ASR test case, confirm that the logs or output indicate the ASR path was indeed used.\n3.  Integrate this script into the CI/CD pipeline as a smoke test. Verify that the CI build fails if the script reports errors.\n4.  Confirm that the documentation for running the tests on Windows PowerShell is clear, accurate, and easy to follow.",
+        "status": "pending",
+        "dependencies": [
+          5,
+          11,
+          19
+        ],
+        "priority": "low",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-08-03T02:25:28.517Z",
-      "updated": "2025-08-03T06:01:52.804Z",
+      "updated": "2025-08-08T08:43:12.760Z",
       "description": "Tasks for master context"
     }
   }

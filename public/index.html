@@ -7,6 +7,12 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Markdown preview dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.2.0/github-markdown.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/build/highlight.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -212,6 +218,9 @@
                     <button id="downloadTranscriptBtn" class="download-transcript-btn">
                         <i class="fas fa-file-text"></i> Download Transcript
                     </button>
+                    <button id="downloadRawSubsBtn" class="download-transcript-btn" style="display:none;">
+                        <i class="fas fa-closed-captioning"></i> Download Raw Subtitles
+                    </button>
                     <button id="downloadDescriptionBtn" class="download-description-btn">
                         <i class="fas fa-file-alt"></i> Download Description
                     </button>
@@ -224,6 +233,15 @@
                     <button id="newAnalysisBtn" class="new-analysis-btn">
                         <i class="fas fa-plus"></i> New Analysis
                     </button>
+                </div>
+
+                <div class="transcript-meta" id="transcriptMeta" style="display:none;">
+                    <span id="transcriptSourceLabel" class="badge"></span>
+                    <span id="transcriptAttemptsLabel" class="badge attempts"></span>
+                    <button id="ytDlpHealthBtn" class="refresh-btn" title="Test yt-dlp availability">
+                        <i class="fas fa-stethoscope"></i> Test yt-dlp
+                    </button>
+                    <span class="tooltip" id="ytDlpTooltip" title="Use browser cookies for yt-dlp: set YT_DLP_COOKIES=browser:edge (or browser:chrome). Optional: YT_DLP_PATH to full exe, YT_DLP_USER_AGENT to custom UA. Test: yt-dlp --list-subs <url> or --write-auto-subs.">?</span>
                 </div>
 
                 <!-- Notion Integration Section -->
@@ -272,7 +290,25 @@
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
-                    <div id="markdownPreview" class="markdown-preview"></div>
+                <div class="preview-toolbar">
+                    <div class="toolbar-left">
+                        <button id="viewRenderedBtn" class="toolbar-btn" title="Render Markdown">
+                            <i class="fas fa-eye"></i> Rendered
+                        </button>
+                        <button id="viewRawBtn" class="toolbar-btn" title="Show raw Markdown">
+                            <i class="fas fa-file-alt"></i> Raw
+                        </button>
+                    </div>
+                    <div class="toolbar-right">
+                        <button id="copyMdBtn" class="toolbar-btn" title="Copy Markdown">
+                            <i class="fas fa-copy"></i> Copy MD
+                        </button>
+                        <button id="copyHtmlBtn" class="toolbar-btn" title="Copy rendered HTML">
+                            <i class="fas fa-code"></i> Copy HTML
+                        </button>
+                    </div>
+                </div>
+                <div id="markdownPreview" class="markdown-preview markdown-body"></div>
                 </div>
             </div>
 
