@@ -392,6 +392,61 @@
         </div>
     </div>
 
+    <!-- Download Modal -->
+    <div id="downloadModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="downloadModalTitle">
+        <div class="modal-content download-modal">
+            <div class="modal-header">
+                <h3 id="downloadModalTitle"><i class="fas fa-download"></i> Save Markdown File</h3>
+                <button class="close-btn" id="closeDownloadBtn" aria-label="Close download modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="downloadFilename">Filename</label>
+                    <input type="text" id="downloadFilename" placeholder="Enter filename (without .md extension)" aria-label="Filename">
+                    <small>File will be saved with .md extension</small>
+                </div>
+                
+                <!-- Save to Folder section -->
+                <div class="form-group">
+                    <label for="downloadFolderPath">Save to Folder</label>
+                    <input type="text" id="downloadFolderPath" placeholder="Type or paste folder path (e.g., C:/Users/YourName/Documents)" aria-label="Folder path">
+                    <small class="form-help">Type or paste the full path to the folder where you want to save your markdown file. Use Quick Access or Favorites for convenience.</small>
+                </div>
+
+                <!-- Favorites Section -->
+                <div class="form-group">
+                    <label><i class="fas fa-star"></i> Favorite Folders</label>
+                    <div class="favorites-section" aria-label="Favorite folders">
+                        <div id="favoriteFoldersList" class="favorites-list">
+                            <!-- Favorite folders will be populated here -->
+                        </div>
+                        <div class="favorites-actions">
+                            <button type="button" id="addCurrentToFavoritesBtn" class="add-favorite-btn" disabled aria-label="Add current folder to favorites">
+                                <i class="fas fa-star"></i> Add Current to Favorites
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Common Directories -->
+                <div class="form-group">
+                    <label><i class="fas fa-folder"></i> Quick Access</label>
+                    <div id="commonDirectoriesList" class="common-directories" aria-label="Common directories">
+                        <!-- Common directories will be populated here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="saveMarkdownBtn" class="save-btn" disabled aria-label="Save markdown file">
+                    <i class="fas fa-save"></i> Save File
+                </button>
+                <button id="cancelDownloadBtn" class="cancel-btn" aria-label="Cancel download modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html> 

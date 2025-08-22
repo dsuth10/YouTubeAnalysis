@@ -461,177 +461,6 @@ body {
     font-style: italic;
 }
 
-/* Editable Prompt Interface Styles */
-.prompt-template-select {
-    width: 100%;
-    padding: 15px;
-    border: 2px solid #e1e5e9;
-    border-radius: 12px;
-    font-size: 1rem;
-    transition: all 0.3s ease;
-    background: #f8f9fa;
-}
-
-.prompt-template-select:focus {
-    outline: none;
-    border-color: #667eea;
-    background: white;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.prompt-editor-container {
-    margin-top: 15px;
-    border: 2px solid #e1e5e9;
-    border-radius: 12px;
-    background: white;
-    overflow: hidden;
-    transition: all 0.3s ease;
-}
-
-.prompt-editor-container.active {
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.prompt-editor-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e1e5e9;
-}
-
-.prompt-editor-header label {
-    font-weight: 600;
-    color: #555;
-    font-size: 0.95rem;
-    margin: 0;
-}
-
-.prompt-editor-header label i {
-    margin-right: 8px;
-    color: #667eea;
-}
-
-.prompt-controls {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.use-edited-prompt-checkbox {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.85rem;
-    color: #666;
-    cursor: pointer;
-    user-select: none;
-}
-
-.use-edited-prompt-checkbox input[type="checkbox"] {
-    margin: 0;
-    cursor: pointer;
-}
-
-.reset-prompt-btn {
-    background: #6c757d;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.reset-prompt-btn:hover {
-    background: #5a6268;
-    transform: translateY(-1px);
-}
-
-.reset-prompt-btn:active {
-    transform: translateY(0);
-}
-
-.edited-prompt-textarea {
-    width: 100%;
-    padding: 16px;
-    border: none;
-    border-radius: 0;
-    font-size: 14px;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    line-height: 1.5;
-    resize: vertical;
-    min-height: 200px;
-    background: white;
-    color: #333;
-}
-
-.edited-prompt-textarea:focus {
-    outline: none;
-    background: #fafbfc;
-}
-
-.edited-prompt-textarea::placeholder {
-    color: #999;
-    font-style: italic;
-}
-
-.prompt-status {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 16px;
-    background: #f8f9fa;
-    border-top: 1px solid #e1e5e9;
-    font-size: 0.8rem;
-}
-
-.prompt-indicator {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: #666;
-}
-
-.prompt-indicator i {
-    color: #17a2b8;
-}
-
-.prompt-indicator.using-edited {
-    color: #28a745;
-}
-
-.prompt-indicator.using-edited i {
-    color: #28a745;
-}
-
-.prompt-indicator.using-original {
-    color: #6c757d;
-}
-
-.prompt-indicator.using-original i {
-    color: #6c757d;
-}
-
-.prompt-length {
-    color: #999;
-    font-family: monospace;
-}
-
-.prompt-length.warning {
-    color: #ffc107;
-}
-
-.prompt-length.danger {
-    color: #dc3545;
-}
-
 .analyze-btn {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
@@ -793,9 +622,6 @@ body {
 }
 
 .download-btn,
-.download-prompt-btn,
-.download-transcript-btn,
-.download-description-btn,
 .preview-btn,
 .export-btn,
 .new-analysis-btn {
@@ -819,36 +645,6 @@ body {
 
 .download-btn:hover {
     background: #218838;
-    transform: translateY(-1px);
-}
-
-.download-prompt-btn {
-    background: #6f42c1;
-    color: white;
-}
-
-.download-prompt-btn:hover {
-    background: #5a32a3;
-    transform: translateY(-1px);
-}
-
-.download-transcript-btn {
-    background: #fd7e14;
-    color: white;
-}
-
-.download-transcript-btn:hover {
-    background: #e8690b;
-    transform: translateY(-1px);
-}
-
-.download-description-btn {
-    background: #20c997;
-    color: white;
-}
-
-.download-description-btn:hover {
-    background: #1ba37e;
     transform: translateY(-1px);
 }
 
@@ -1307,6 +1103,231 @@ body {
     display: none !important;
 }
 
+/* Download Modal Styles */
+.download-modal {
+    max-width: 700px;
+    width: 90%;
+}
+
+.folder-selection {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.folder-selection input {
+    flex: 1;
+}
+
+.browse-btn {
+    background: #667eea;
+    color: white;
+    border: none;
+    padding: 15px 20px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.browse-btn:hover {
+    background: #5a6fd8;
+    transform: translateY(-1px);
+}
+
+.browse-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.favorites-section {
+    border: 1px solid #e1e5e9;
+    border-radius: 12px;
+    padding: 15px;
+    background: #f8f9fa;
+}
+
+.favorites-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 15px;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.favorite-folder-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: white;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.favorite-folder-item:hover {
+    border-color: #667eea;
+    background: #f0f4ff;
+}
+
+.favorite-folder-item.selected {
+    border-color: #667eea;
+    background: #667eea;
+    color: white;
+}
+
+.favorite-folder-item .folder-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.favorite-folder-item .folder-name {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.favorite-folder-item .folder-path {
+    font-size: 0.8rem;
+    opacity: 0.7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.favorite-folder-item .remove-favorite {
+    background: none;
+    border: none;
+    color: #dc3545;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    opacity: 0.7;
+}
+
+.favorite-folder-item:hover .remove-favorite {
+    opacity: 1;
+}
+
+.favorite-folder-item .remove-favorite:hover {
+    background: #dc3545;
+    color: white;
+}
+
+.favorites-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.add-favorite-btn {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.add-favorite-btn:hover:not(:disabled) {
+    background: #218838;
+    transform: translateY(-1px);
+}
+
+.add-favorite-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.common-directories {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.common-directory-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: white;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.common-directory-item:hover {
+    border-color: #667eea;
+    background: #f0f4ff;
+}
+
+.common-directory-item.selected {
+    border-color: #667eea;
+    background: #667eea;
+    color: white;
+}
+
+.common-directory-item i {
+    color: #667eea;
+    width: 16px;
+    flex-shrink: 0;
+}
+
+.common-directory-item.selected i {
+    color: white;
+}
+
+.common-directory-item .folder-name {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.common-directory-item .folder-path {
+    font-size: 0.8rem;
+    opacity: 0.7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.empty-favorites {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+    font-style: italic;
+}
+
+.empty-favorites i {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    opacity: 0.5;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
     .container {
@@ -1348,69 +1369,27 @@ body {
         width: 95%;
         margin: 20px;
     }
-} 
-
-/* Two-column main layout for form and prompt editor */
-.main-flex-row {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 32px;
-    width: 100%;
-    min-height: 600px;
-}
-
-.form-container {
-    max-width: 600px;
-    width: 100%;
-    flex: 0 0 600px;
-}
-
-.prompt-editor-box {
-    flex: 1 1 0;
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.08);
-    padding: 40px 32px;
-    min-width: 320px;
-    min-height: 600px;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    margin-left: 0;
-}
-
-.prompt-editor-section {
-    width: 100%;
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-}
-
-/* Make prompt textarea fill the box */
-.prompt-editor-container {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-}
-
-.edited-prompt-textarea {
-    min-height: 200px;
-    height: 200px;
-    max-height: 400px;
-    resize: vertical;
-    width: 100%;
-    font-size: 1rem;
-}
-
-@media (max-width: 1100px) {
-    .main-flex-row {
-        flex-direction: column;
-        gap: 24px;
+    
+    .download-modal {
+        max-width: 95%;
+        width: 95%;
     }
-    .form-container, .prompt-editor-box {
-        max-width: 100%;
+    
+    .folder-selection {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .browse-btn {
         width: 100%;
-        min-width: 0;
+        justify-content: center;
+    }
+    
+    .common-directories {
+        grid-template-columns: 1fr;
+    }
+    
+    .favorites-list {
+        max-height: 120px;
     }
 } 

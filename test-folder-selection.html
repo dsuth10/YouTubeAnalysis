@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Folder Selection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            cursor: pointer;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Folder Selection Test</h1>
+    
+    <div class="test-section">
+        <h3>Test 1: Improved Folder Selection</h3>
+        <p>This test shows the improved folder selection that explains what's happening:</p>
+        <button onclick="testFolderSelection()">Browse Folder (Improved)</button>
+        <input type="file" id="folderInput" webkitdirectory directory multiple>
+        <div id="result1" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 2: Manual Path Entry</h3>
+        <p>You can also manually enter a folder path:</p>
+        <input type="text" id="manualPath" placeholder="Enter folder path (e.g., C:\Users\YourName\Documents)" style="width: 100%; padding: 10px; margin: 10px 0;">
+        <button onclick="testManualPath()">Test Manual Path</button>
+        <div id="result2" class="result"></div>
+    </div>
+
+    <script>
+        function testFolderSelection() {
+            const resultDiv = document.getElementById('result1');
+            resultDiv.innerHTML = '<strong>Click the button above to select a folder...</strong>';
+            
+            const fileInput = document.getElementById('folderInput');
+            fileInput.onchange = function(event) {
+                const files = event.target.files;
+                if (files.length > 0) {
+                    const filePath = files[0].webkitRelativePath || files[0].name;
+                    const dirPath = filePath.split('/')[0];
+                    
+                    let message = `Selected folder: "${dirPath}"`;
+                    if (files.length > 1) {
+                        message += `<br><strong>Note:</strong> This folder contains ${files.length} files, but you're only saving ONE markdown file.`;
+                    }
+                    message += `<br><br><strong>Next step:</strong> Enter the full path manually for security reasons.`;
+                    
+                    resultDiv.innerHTML = message;
+                }
+                fileInput.value = ''; // Clear the input
+            };
+            
+            fileInput.click();
+        }
+
+        function testManualPath() {
+            const path = document.getElementById('manualPath').value.trim();
+            const resultDiv = document.getElementById('result2');
+            
+            if (path) {
+                resultDiv.innerHTML = `<strong>Path entered:</strong> ${path}<br><strong>Status:</strong> Ready to save file`;
+            } else {
+                resultDiv.innerHTML = '<strong>Error:</strong> Please enter a folder path';
+            }
+        }
+    </script>
+</body>
+</html> 
