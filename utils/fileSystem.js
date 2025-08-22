@@ -195,7 +195,7 @@ async function saveMarkdownToFolder(content, filename, folderPath, overwrite = f
 }
 
 // Browse available directories (get common directories)
-function getCommonDirectories() {
+async function getCommonDirectories() {
     const homeDir = os.homedir();
     const commonDirs = [
         homeDir,
@@ -207,14 +207,19 @@ function getCommonDirectories() {
         path.join(homeDir, 'Music')
     ];
     
-    return commonDirs.filter(dir => {
+    const accessibleDirs = [];
+    for (const dir of commonDirs) {
         try {
-            const stats = fs.statSync(dir);
-            return stats.isDirectory();
+            const stats = await fs.stat(dir);
+            if (stats.isDirectory()) {
+                accessibleDirs.push(dir);
+            }
         } catch (error) {
-            return false;
+            // Directory not accessible, skip it
         }
-    });
+    }
+    
+    return accessibleDirs;
 }
 
 // Check if path is accessible

@@ -1265,7 +1265,7 @@ app.delete('/api/folders/favorites', async (req, res) => {
 // Browse available directories
 app.get('/api/folders/browse', async (req, res) => {
     try {
-        const commonDirs = fileSystem.getCommonDirectories();
+        const commonDirs = await fileSystem.getCommonDirectories();
         const favorites = await fileSystem.getFavoriteFolders();
         
         // Check which favorites are still accessible
