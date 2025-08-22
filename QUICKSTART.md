@@ -27,7 +27,7 @@ Get your YouTube Video Research App running in 5 minutes! 🚀
    ```env
    YOUTUBE_API_KEY=your_youtube_api_key_here
    OPENROUTER_API_KEY=your_openrouter_api_key_here
-   PORT=3000
+   PORT=8000
    ```
 
 ## Step 3: Start the App
@@ -36,7 +36,7 @@ Get your YouTube Video Research App running in 5 minutes! 🚀
 npm start
 ```
 
-Open your browser to: `http://localhost:3000`
+Open your browser to: `http://localhost:8000`
 
 ## Step 4: Test It Out
 
@@ -63,7 +63,7 @@ Open your browser to: `http://localhost:3000`
 
 **App won't start**
 - Make sure you ran `npm install`
-- Check that port 3000 isn't already in use
+- Check that port 8000 isn't already in use
 
 ## Cost Estimate
 
