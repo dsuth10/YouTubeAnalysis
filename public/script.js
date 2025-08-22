@@ -17,16 +17,6 @@ const errorSection = document.getElementById('errorSection');
 const loadingMessage = document.getElementById('loadingMessage');
 const errorMessage = document.getElementById('errorMessage');
 
-// Editable Prompt Interface Elements
-const promptTemplateSelect = document.getElementById('promptTemplateSelect');
-const promptEditorContainer = document.getElementById('promptEditorContainer');
-const editedPromptTextarea = document.getElementById('editedPromptTextarea');
-const useEditedPromptCheckbox = document.getElementById('useEditedPromptCheckbox');
-const resetPromptBtn = document.getElementById('resetPromptBtn');
-const promptIndicator = document.getElementById('promptIndicator');
-const promptStatusText = document.getElementById('promptStatusText');
-const promptLength = document.getElementById('promptLength');
-
 // Result elements
 const videoTitle = document.getElementById('videoTitle');
 const videoChannel = document.getElementById('videoChannel');
@@ -37,25 +27,15 @@ const videoThumbnail = document.getElementById('videoThumbnail');
 
 // Action buttons
 const downloadBtn = document.getElementById('downloadBtn');
-const downloadPromptBtn = document.getElementById('downloadPromptBtn');
 const previewBtn = document.getElementById('previewBtn');
 const exportBtn = document.getElementById('exportBtn');
 const newAnalysisBtn = document.getElementById('newAnalysisBtn');
 const retryBtn = document.getElementById('retryBtn');
-const downloadRawSubsBtn = document.getElementById('downloadRawSubsBtn');
-const transcriptMetaDiv = document.getElementById('transcriptMeta');
-const transcriptSourceLabel = document.getElementById('transcriptSourceLabel');
-const transcriptAttemptsLabel = document.getElementById('transcriptAttemptsLabel');
-const ytDlpHealthBtn = document.getElementById('ytDlpHealthBtn');
 
 // Preview elements
 const previewSection = document.getElementById('previewSection');
 const markdownPreview = document.getElementById('markdownPreview');
 const closePreviewBtn = document.getElementById('closePreviewBtn');
-const viewRenderedBtn = document.getElementById('viewRenderedBtn');
-const viewRawBtn = document.getElementById('viewRawBtn');
-const copyMdBtn = document.getElementById('copyMdBtn');
-const copyHtmlBtn = document.getElementById('copyHtmlBtn');
 
 // Modal elements
 const settingsBtn = document.getElementById('settingsBtn');
@@ -67,6 +47,19 @@ const closeHelpBtn = document.getElementById('closeHelpBtn');
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
 const closeHelpModalBtn = document.getElementById('closeHelpModalBtn');
+
+// Download modal elements
+const downloadModal = document.getElementById('downloadModal');
+const closeDownloadBtn = document.getElementById('closeDownloadBtn');
+const cancelDownloadBtn = document.getElementById('cancelDownloadBtn');
+const downloadFilename = document.getElementById('downloadFilename');
+const downloadFolderPath = document.getElementById('downloadFolderPath');
+const browseFolderBtn = document.getElementById('browseFolderBtn');
+const folderInput = document.getElementById('folderInput');
+const favoriteFoldersList = document.getElementById('favoriteFoldersList');
+const addCurrentToFavoritesBtn = document.getElementById('addCurrentToFavoritesBtn');
+const commonDirectoriesList = document.getElementById('commonDirectoriesList');
+const saveMarkdownBtn = document.getElementById('saveMarkdownBtn');
 
 // API Keys
 const youtubeApiKeyInput = document.getElementById('youtubeApiKey');
@@ -84,11 +77,6 @@ const importFavoritesInput = document.getElementById('importFavoritesInput');
 let currentResult = null;
 let allModels = []; // Store all available models
 let favoriteModels = []; // Store favorite model IDs
-
-// Editable Prompt Interface Variables
-let availablePrompts = []; // Store all available prompts
-let currentPromptTemplate = null; // Store the currently selected template
-let originalPromptContent = ''; // Store the original template content
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', function() {
@@ -115,33 +103,15 @@ function setupEventListeners() {
     favoritesOnlyCheckbox.addEventListener('change', filterModels);
     favoritesFilterBtn.addEventListener('click', toggleFavoritesFilter);
     
-    // Model refresh functionality
-    document.getElementById('refreshModelsBtn').addEventListener('click', handleRefreshModels);
-    
-    // Editable Prompt Interface Event Listeners
-    promptTemplateSelect.addEventListener('change', handlePromptTemplateChange);
-    editedPromptTextarea.addEventListener('input', handlePromptTextareaInput);
-    useEditedPromptCheckbox.addEventListener('change', handleUseEditedPromptChange);
-    resetPromptBtn.addEventListener('click', handleResetPrompt);
-    
     // Action buttons
     downloadBtn.addEventListener('click', handleDownload);
-    downloadPromptBtn.addEventListener('click', handleDownloadPrompt);
-    document.getElementById('downloadTranscriptBtn').addEventListener('click', handleDownloadTranscript);
-    document.getElementById('downloadDescriptionBtn').addEventListener('click', handleDownloadDescription);
     previewBtn.addEventListener('click', handlePreview);
     exportBtn.addEventListener('click', handleExportToNotion);
     newAnalysisBtn.addEventListener('click', handleNewAnalysis);
     retryBtn.addEventListener('click', handleRetry);
-    if (downloadRawSubsBtn) downloadRawSubsBtn.addEventListener('click', handleDownloadRawSubs);
-    if (ytDlpHealthBtn) ytDlpHealthBtn.addEventListener('click', handleYtDlpHealthCheck);
     
     // Preview controls
     closePreviewBtn.addEventListener('click', closePreview);
-    if (viewRenderedBtn) viewRenderedBtn.addEventListener('click', showRenderedPreview);
-    if (viewRawBtn) viewRawBtn.addEventListener('click', showRawPreview);
-    if (copyMdBtn) copyMdBtn.addEventListener('click', copyMarkdownToClipboard);
-    if (copyHtmlBtn) copyHtmlBtn.addEventListener('click', copyHtmlToClipboard);
     
     // Modal controls
     settingsBtn.addEventListener('click', openSettings);
@@ -151,6 +121,17 @@ function setupEventListeners() {
     saveSettingsBtn.addEventListener('click', saveSettings);
     cancelSettingsBtn.addEventListener('click', closeSettings);
     closeHelpModalBtn.addEventListener('click', closeHelp);
+    
+    // Download modal controls
+    closeDownloadBtn.addEventListener('click', hideDownloadModal);
+    cancelDownloadBtn.addEventListener('click', hideDownloadModal);
+    // Remove browse folder and file input logic
+    // Only allow manual entry, quick access, and favorites for folder selection
+    // (No code needed for folderInput or handleFolderSelection)
+    downloadFolderPath.addEventListener('input', validateDownloadForm);
+    downloadFilename.addEventListener('input', validateDownloadForm);
+    addCurrentToFavoritesBtn.addEventListener('click', addCurrentFolderToFavorites);
+    saveMarkdownBtn.addEventListener('click', saveMarkdownToFolder);
     
     // Favorites management
     clearFavoritesBtn.addEventListener('click', clearAllFavorites);
@@ -162,6 +143,7 @@ function setupEventListeners() {
     window.addEventListener('click', function(event) {
         if (event.target === settingsModal) closeSettings();
         if (event.target === helpModal) closeHelp();
+        if (event.target === downloadModal) hideDownloadModal();
     });
     
     // Keyboard shortcuts
@@ -177,12 +159,6 @@ function setupEventListeners() {
             event.preventDefault();
             handleFavoriteToggle();
         }
-        
-        // Ctrl/Cmd + R to refresh models
-        if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
-            event.preventDefault();
-            handleRefreshModels();
-        }
     });
 }
 
@@ -193,20 +169,6 @@ async function handleFormSubmit(e) {
     const url = youtubeUrlInput.value.trim();
     const model = modelSelect.value;
     const promptId = promptSelect.value;
-    const tokenLimit = parseInt(document.getElementById('tokenLimitSelect').value) || 10000;
-    const manualTranscript = document.getElementById('manualTranscriptInput') ? document.getElementById('manualTranscriptInput').value.trim() : '';
-    
-    // Get edited prompt if enabled
-    let editedPrompt = null;
-    if (useEditedPromptCheckbox.checked && editedPromptTextarea.value.trim() !== '') {
-        editedPrompt = editedPromptTextarea.value.trim();
-        
-        // Validate prompt length
-        if (editedPrompt.length > 5000) {
-            showError('Edited prompt is too long. Please keep it under 5000 characters.');
-            return;
-        }
-    }
     
     if (!url) {
         showError('Please enter a YouTube URL');
@@ -220,7 +182,7 @@ async function handleFormSubmit(e) {
     }
     
     // Start analysis
-    await analyzeVideo(url, model, promptId, tokenLimit, manualTranscript, editedPrompt);
+    await analyzeVideo(url, model, promptId);
 }
 
 // Validate YouTube URL
@@ -235,24 +197,17 @@ function isValidYouTubeUrl(url) {
 }
 
 // Analyze video
-async function analyzeVideo(url, model, promptId, tokenLimit, manualTranscript, editedPrompt = null) {
+async function analyzeVideo(url, model, promptId) {
     try {
         showLoading();
         updateLoadingMessage('Fetching video information...');
-        
-        const requestBody = { url, model, promptId, tokenLimit, manualTranscript };
-        
-        // Add edited prompt if provided
-        if (editedPrompt) {
-            requestBody.editedPrompt = editedPrompt;
-        }
         
         const response = await fetch('/api/process', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify({ url, model, promptId })
         });
         
         const data = await response.json();
@@ -261,24 +216,8 @@ async function analyzeVideo(url, model, promptId, tokenLimit, manualTranscript, 
             throw new Error(data.error || 'Failed to analyze video');
         }
         
-        console.log('Received analysis result:', data);
-        console.log('Transcript available:', !!data.transcript);
-        console.log('Transcript length:', data.transcript ? data.transcript.length : 'null');
-        console.log('Raw description available:', !!data.rawDescription);
-        
         currentResult = data;
         showResult(data);
-        
-        // Show notification based on transcript status
-        if (data.transcriptStatus === 'available') {
-            showNotification('Analysis completed successfully with transcript!', 'success');
-        } else if (data.transcriptStatus === 'api_available_but_extraction_failed') {
-            showNotification('Analysis completed. Captions exist but could not be extracted. Analysis based on video description.', 'warning');
-        } else if (data.transcriptStatus === 'failed') {
-            showNotification('Analysis completed, but no transcript was available for this video. The analysis was based on the video description.', 'info');
-        } else {
-            showNotification('Analysis completed, but no transcript was available for this video. The analysis was based on the video description.', 'info');
-        }
         
     } catch (error) {
         console.error('Analysis error:', error);
@@ -336,24 +275,6 @@ function showResult(data) {
     
     resultSection.classList.remove('hidden');
     analyzeBtn.disabled = false;
-
-    // Transcript meta labels
-    if (data.transcriptMeta) {
-        transcriptMetaDiv.style.display = '';
-        const source = data.transcriptMeta.source || data.transcriptStatus || 'unknown';
-        const attempts = Array.isArray(data.transcriptMeta.attempts) ? data.transcriptMeta.attempts.length : 0;
-        transcriptSourceLabel.textContent = `Transcript via: ${source}`;
-        transcriptAttemptsLabel.textContent = `Attempts: ${attempts}`;
-    } else {
-        transcriptMetaDiv.style.display = 'none';
-    }
-
-    // Enable Raw Subs button only for yt-dlp source for now
-    if (data.transcriptMeta && data.transcriptMeta.source === 'subs_ytdlp') {
-        downloadRawSubsBtn.style.display = '';
-    } else {
-        downloadRawSubsBtn.style.display = 'none';
-    }
 }
 
 // Show error
@@ -372,291 +293,30 @@ function hideAllSections() {
     previewSection.classList.add('hidden');
 }
 
-// Handle download
+// Handle download - show modal instead of direct download
 function handleDownload() {
     if (!currentResult) return;
     
-    const blob = new Blob([currentResult.markdown], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = currentResult.filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-// Handle download prompt
-async function handleDownloadPrompt() {
-    if (!currentResult) {
-        alert('No analysis result available. Please analyze a video first.');
-        return;
-    }
-
-    try {
-        downloadPromptBtn.disabled = true;
-        downloadPromptBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Getting Prompt...';
-        
-        const url = youtubeUrlInput.value.trim();
-        const promptId = promptSelect.value;
-        const model = modelSelect.value;
-        
-        const response = await fetch('/api/getPrompt', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ url, promptId, model })
-        });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to get prompt');
-        }
-        
-        // Create filename based on video title
-        const videoTitle = currentResult.videoInfo.title || 'youtube-video';
-        const sanitizedTitle = videoTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        const filename = `prompt_${sanitizedTitle}.json`;
-        
-        // Create and download the JSON file
-        const blob = new Blob([JSON.stringify(data.prompt, null, 2)], { type: 'application/json' });
-        const downloadUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(downloadUrl);
-        
-        showNotification('Prompt downloaded successfully!', 'success');
-        
-    } catch (error) {
-        console.error('Download prompt error:', error);
-        showNotification(`Failed to download prompt: ${error.message}`, 'error');
-    } finally {
-        downloadPromptBtn.disabled = false;
-        downloadPromptBtn.innerHTML = '<i class="fas fa-file-code"></i> Download Prompt';
-    }
-}
-
-// Handle download transcript
-function handleDownloadTranscript() {
-    console.log('Download transcript clicked');
-    console.log('Current result:', currentResult);
-    console.log('Transcript available:', !!currentResult?.transcript);
-    console.log('Transcript length:', currentResult?.transcript ? currentResult.transcript.length : 'null');
+    // Set default filename
+    downloadFilename.value = currentResult.filename.replace('.md', '');
     
-    if (!currentResult || !currentResult.transcript) {
-        alert('No transcript available. Please analyze a video first.');
-        return;
-    }
+    // Clear previous selections
+    downloadFolderPath.value = '';
+    clearFolderSelections();
     
-    // Create filename based on video title
-    const videoTitle = currentResult.videoInfo.title || 'youtube-video';
-    const sanitizedTitle = videoTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    const filename = `transcript_${sanitizedTitle}.md`;
+    // Load favorites and common directories
+    loadDownloadModalData();
     
-    // Create markdown content with metadata
-    const markdownContent = `# Transcript: ${currentResult.videoInfo.title}
-
-**Channel:** ${currentResult.videoInfo.channelTitle}  
-**Video ID:** ${currentResult.videoInfo.videoId}  
-**URL:** https://youtu.be/${currentResult.videoInfo.videoId}  
-**Published:** ${new Date(currentResult.videoInfo.publishedAt).toLocaleDateString('en-AU', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-})}
-
----
-
-${currentResult.transcript}
-
----
-
-    *This transcript was extracted automatically. Source: ${currentResult.transcriptMeta?.source || currentResult.transcriptStatus || 'unknown'}.*
-`;
-    
-    // Create and download the file
-    const blob = new Blob([markdownContent], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    showNotification('Transcript downloaded successfully!', 'success');
-}
-
-// Handle download raw subtitles
-async function handleDownloadRawSubs() {
-    if (!currentResult) return;
-    try {
-        downloadRawSubsBtn.disabled = true;
-        downloadRawSubsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing...';
-        const videoId = currentResult.videoInfo.videoId;
-        const resp = await fetch(`/api/download-raw-subs/${videoId}`);
-        if (!resp.ok) throw new Error(await resp.text());
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${videoId}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        showNotification('Raw subtitles downloaded (plain text fallback).', 'success');
-    } catch (e) {
-        showNotification(`Failed to download raw subtitles: ${e.message}`, 'error');
-    } finally {
-        downloadRawSubsBtn.disabled = false;
-        downloadRawSubsBtn.innerHTML = '<i class="fas fa-closed-captioning"></i> Download Raw Subtitles';
-    }
-}
-
-// yt-dlp health check
-async function handleYtDlpHealthCheck() {
-    try {
-        ytDlpHealthBtn.disabled = true;
-        ytDlpHealthBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
-        const resp = await fetch('/api/yt-dlp-health-check');
-        const data = await resp.json();
-        if (data.ok) {
-            showNotification(data.message, 'success');
-        } else {
-            showNotification(data.message, 'error');
-        }
-    } catch (e) {
-        showNotification(`Health check failed: ${e.message}`, 'error');
-    } finally {
-        ytDlpHealthBtn.disabled = false;
-        ytDlpHealthBtn.innerHTML = '<i class="fas fa-stethoscope"></i> Test yt-dlp';
-    }
-}
-
-// Handle download description
-function handleDownloadDescription() {
-    console.log('Download description clicked');
-    console.log('Current result:', currentResult);
-    console.log('Raw description available:', !!currentResult?.rawDescription);
-    console.log('Raw description length:', currentResult?.rawDescription ? currentResult.rawDescription.length : 'null');
-    
-    if (!currentResult || !currentResult.rawDescription) {
-        alert('No video description available. Please analyze a video first.');
-        return;
-    }
-    
-    // Create filename based on video title
-    const videoTitle = currentResult.videoInfo.title || 'youtube-video';
-    const sanitizedTitle = videoTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    const filename = `description_${sanitizedTitle}.md`;
-    
-    // Create markdown content with metadata
-    const markdownContent = `# Video Description: ${currentResult.videoInfo.title}
-
-**Channel:** ${currentResult.videoInfo.channelTitle}  
-**Video ID:** ${currentResult.videoInfo.videoId}  
-**URL:** https://youtu.be/${currentResult.videoInfo.videoId}  
-**Published:** ${new Date(currentResult.videoInfo.publishedAt).toLocaleDateString('en-AU', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-})}
-
----
-
-${currentResult.rawDescription}
-
----
-
-*This description was extracted directly from YouTube using the YouTube Data API.*
-`;
-    
-    // Create and download the file
-    const blob = new Blob([markdownContent], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    showNotification('Video description downloaded successfully!', 'success');
+    // Show modal
+    showDownloadModal();
 }
 
 // Handle preview
 function handlePreview() {
     if (!currentResult) return;
-    showRenderedPreview();
+    
+    markdownPreview.textContent = currentResult.markdown;
     previewSection.classList.remove('hidden');
-}
-
-// Markdown preview helpers
-function stripFrontMatter(md) {
-    if (!md) return '';
-    const lines = md.split('\n');
-    if (lines[0]?.trim() !== '---') return md;
-    let i = 1;
-    while (i < lines.length && lines[i].trim() !== '---') i++;
-    return lines.slice(i + 1).join('\n');
-}
-
-function renderMarkdownPreview(markdown) {
-    const source = stripFrontMatter(markdown || '');
-    if (window.marked) {
-        window.marked.setOptions({ breaks: true, gfm: true, headerIds: false, mangle: false });
-        const html = window.marked.parse(source);
-        const sanitized = window.DOMPurify ? window.DOMPurify.sanitize(html, { USE_PROFILES: { html: true } }) : html;
-        markdownPreview.innerHTML = sanitized;
-        if (window.hljs) {
-            markdownPreview.querySelectorAll('pre code').forEach(block => window.hljs.highlightElement(block));
-        }
-    } else {
-        markdownPreview.textContent = source;
-    }
-}
-
-function showRenderedPreview() {
-    if (!currentResult) return;
-    renderMarkdownPreview(currentResult.markdown);
-}
-
-function showRawPreview() {
-    if (!currentResult) return;
-    markdownPreview.textContent = stripFrontMatter(currentResult.markdown || '');
-}
-
-async function copyMarkdownToClipboard() {
-    if (!currentResult) return;
-    try {
-        await navigator.clipboard.writeText(currentResult.markdown || '');
-        showNotification('Markdown copied!', 'success');
-    } catch (e) {
-        showNotification('Failed to copy Markdown', 'error');
-    }
-}
-
-async function copyHtmlToClipboard() {
-    if (!currentResult) return;
-    try {
-        const source = stripFrontMatter(currentResult.markdown || '');
-        const html = window.marked ? window.marked.parse(source) : source;
-        const sanitized = window.DOMPurify ? window.DOMPurify.sanitize(html, { USE_PROFILES: { html: true } }) : html;
-        await navigator.clipboard.writeText(sanitized);
-        showNotification('HTML copied!', 'success');
-    } catch (e) {
-        showNotification('Failed to copy HTML', 'error');
-    }
 }
 
 // Close preview
@@ -669,30 +329,13 @@ function handleNewAnalysis() {
     hideAllSections();
     analysisForm.classList.remove('hidden');
     youtubeUrlInput.value = '';
-    if (document.getElementById('manualTranscriptInput')) {
-        document.getElementById('manualTranscriptInput').value = '';
-    }
     currentResult = null;
-    
-    // Reset Notion state
-    selectedDatabaseId = null;
-    if (databaseSelect) {
-        databaseSelect.value = '';
-    }
-    if (saveToNotionBtn) {
-        saveToNotionBtn.disabled = true;
-    }
-    if (saveStatus) {
-        saveStatus.textContent = '';
-        saveStatus.className = 'save-status';
-    }
 }
 
 // Handle retry
 function handleRetry() {
     if (currentResult) {
-        const tokenLimit = parseInt(document.getElementById('tokenLimitSelect').value) || 10000;
-        analyzeVideo(youtubeUrlInput.value, modelSelect.value, promptSelect.value, tokenLimit);
+        analyzeVideo(youtubeUrlInput.value, modelSelect.value);
     } else {
         handleNewAnalysis();
     }
@@ -725,19 +368,11 @@ async function handleExportToNotion() {
             })
         });
         
-        if (!response.ok) {
-            const errorText = await response.text();
-            let errorMessage;
-            try {
-                const errorData = JSON.parse(errorText);
-                errorMessage = errorData.error || 'Failed to export to Notion';
-            } catch {
-                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-            }
-            throw new Error(errorMessage);
-        }
-        
         const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to export to Notion');
+        }
         
         // Success
         alert(`✅ ${data.message}\n\nMain Page: ${data.pageUrl}\nAnalysis Page: ${data.childPageUrl}`);
@@ -755,26 +390,29 @@ async function handleExportToNotion() {
 async function loadModels() {
     try {
         const response = await fetch('/api/models');
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            let errorMessage;
-            try {
-                const errorData = JSON.parse(errorText);
-                errorMessage = errorData.error || 'Failed to load models';
-            } catch {
-                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-            }
-            throw new Error(errorMessage);
-        }
-        
         const data = await response.json();
-
-        // Store models globally
-        allModels = Array.isArray(data.models) ? data.models : [];
-
-        // Update model display with favorites applied
-        updateModelDisplay();
+        
+        // Store all models globally and add favorite status
+        allModels = data.models.map(model => ({
+            ...model,
+            isFavorite: isFavorite(model.id)
+        }));
+        
+        // Sort models: favorites first, then alphabetically
+        allModels.sort((a, b) => {
+            if (a.isFavorite && !b.isFavorite) return -1;
+            if (!a.isFavorite && b.isFavorite) return 1;
+            return a.name.localeCompare(b.name);
+        });
+        
+        // Populate the select with all models
+        populateModelSelect(allModels);
+        
+        // Set default selection and update info
+        if (allModels.length > 0) {
+            modelSelect.value = allModels[0].id;
+            updateModelInfo();
+        }
         
         // Update model statistics
         updateModelStats();
@@ -784,63 +422,21 @@ async function loadModels() {
     }
 }
 
-// Handle refresh models button click
-async function handleRefreshModels() {
-    const refreshBtn = document.getElementById('refreshModelsBtn');
-    const originalIcon = refreshBtn.innerHTML;
-    
-    try {
-        // Show loading state
-        refreshBtn.disabled = true;
-        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        
-        // Reload models
-        await loadModels();
-        
-        // Show success notification
-        showNotification('Models refreshed successfully!', 'success');
-        
-    } catch (error) {
-        console.error('Error refreshing models:', error);
-        showNotification('Failed to refresh models. Please try again.', 'error');
-    } finally {
-        // Restore button state
-        refreshBtn.disabled = false;
-        refreshBtn.innerHTML = originalIcon;
-    }
-}
-
 // Load available prompts
 async function loadPrompts() {
     try {
         const response = await fetch('/api/prompts');
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            let errorMessage;
-            try {
-                const errorData = JSON.parse(errorText);
-                errorMessage = errorData.error || 'Failed to load prompts';
-            } catch {
-                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-            }
-            console.error('Failed to load prompts:', errorMessage);
-            availablePrompts = [];
-            populatePromptSelect([]);
-            populatePromptTemplateSelect([]);
-            return;
-        }
-        
         const data = await response.json();
-        availablePrompts = data.prompts; // Store prompts globally
-        populatePromptSelect(data.prompts);
-        populatePromptTemplateSelect(data.prompts);
         
+        if (response.ok) {
+            populatePromptSelect(data.prompts);
+        } else {
+            console.error('Failed to load prompts:', data.error);
+            populatePromptSelect([]);
+        }
     } catch (error) {
         console.error('Error loading prompts:', error);
-        availablePrompts = [];
         populatePromptSelect([]);
-        populatePromptTemplateSelect([]);
     }
 }
 
@@ -849,10 +445,10 @@ function populateModelSelect(models) {
     modelSelect.innerHTML = '';
     
     // Add favorites section if there are favorites
-    const favoriteList = models.filter(model => model.isFavorite);
+    const favoriteModels = models.filter(model => model.isFavorite);
     const nonFavoriteModels = models.filter(model => !model.isFavorite);
-
-    if (favoriteList.length > 0) {
+    
+    if (favoriteModels.length > 0) {
         // Add favorites section header
         const favoritesHeader = document.createElement('option');
         favoritesHeader.disabled = true;
@@ -860,9 +456,9 @@ function populateModelSelect(models) {
         favoritesHeader.style.fontWeight = 'bold';
         favoritesHeader.style.backgroundColor = '#f8f9fa';
         modelSelect.appendChild(favoritesHeader);
-
+        
         // Add favorite models
-        favoriteList.forEach(model => {
+        favoriteModels.forEach(model => {
             const option = document.createElement('option');
             option.value = model.id;
             option.textContent = `★ ${model.name} (${model.provider})`;
@@ -908,25 +504,6 @@ function populatePromptSelect(prompts) {
         option.value = prompt.id;
         option.textContent = prompt.name;
         promptSelect.appendChild(option);
-    });
-}
-
-// Populate prompt template select dropdown
-function populatePromptTemplateSelect(prompts) {
-    promptTemplateSelect.innerHTML = '';
-    
-    // Add default option
-    const defaultOption = document.createElement('option');
-    defaultOption.value = '';
-    defaultOption.textContent = 'Select a template to edit...';
-    promptTemplateSelect.appendChild(defaultOption);
-    
-    // Add all prompts
-    prompts.forEach(prompt => {
-        const option = document.createElement('option');
-        option.value = prompt.id;
-        option.textContent = prompt.name;
-        promptTemplateSelect.appendChild(option);
     });
 }
 
@@ -1410,11 +987,6 @@ function toggleFavorite(modelId) {
     const index = favoriteModels.indexOf(modelId);
     const model = allModels.find(m => m.id === modelId);
     
-    if (!model) {
-        console.error('Model not found:', modelId);
-        return;
-    }
-    
     if (index > -1) {
         // Remove from favorites
         favoriteModels.splice(index, 1);
@@ -1527,8 +1099,8 @@ function updateFavoriteCount() {
 function updateModelStats() {
     if (modelStats && allModels.length > 0) {
         const totalModels = allModels.length;
-        const favoritesTotal = favoriteModels.length;
-        modelStats.textContent = `(${totalModels} models, ${favoritesTotal} favorite${favoritesTotal !== 1 ? 's' : ''})`;
+        const favoriteCount = favoriteModels.length;
+        modelStats.textContent = `(${totalModels} models, ${favoriteCount} favorite${favoriteCount !== 1 ? 's' : ''})`;
     }
 }
 
@@ -1608,7 +1180,7 @@ function showNotification(message, type = 'info') {
     notification.className = `notification notification-${type}`;
     notification.innerHTML = `
         <div class="notification-content">
-            <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'}"></i>
+            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i>
             <span>${message}</span>
         </div>
     `;
@@ -1632,118 +1204,304 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-// Editable Prompt Interface Event Handlers
-async function handlePromptTemplateChange() {
-    const selectedTemplateId = promptTemplateSelect.value;
+// Download Modal Functions
+
+// Show download modal
+function showDownloadModal() {
+    downloadModal.classList.remove('hidden');
+    // Prefill last used folder if available
+    const lastFolder = localStorage.getItem('lastUsedFolder');
+    if (lastFolder) {
+        downloadFolderPath.value = lastFolder;
+    }
+    downloadFilename.focus();
+}
+
+// Hide download modal
+function hideDownloadModal() {
+    downloadModal.classList.add('hidden');
+    clearFolderSelections();
+}
+
+// Load download modal data (favorites and common directories)
+async function loadDownloadModalData() {
+    try {
+        const response = await fetch('/api/folders/browse');
+        const data = await response.json();
+        
+        if (data.success) {
+            populateFavoriteFolders(data.favoriteFolders);
+            populateCommonDirectories(data.commonDirectories);
+        }
+    } catch (error) {
+        console.error('Error loading download modal data:', error);
+        showNotification('Failed to load folder data', 'error');
+    }
+}
+
+// Populate favorite folders list
+function populateFavoriteFolders(favorites) {
+    favoriteFoldersList.innerHTML = '';
     
-    if (!selectedTemplateId) {
-        // Hide editor if no template selected
-        promptEditorContainer.style.display = 'none';
-        currentPromptTemplate = null;
-        originalPromptContent = '';
-        editedPromptTextarea.value = '';
-        useEditedPromptCheckbox.checked = false;
-        updatePromptStatus();
+    if (favorites.length === 0) {
+        favoriteFoldersList.innerHTML = `
+            <div class="empty-favorites">
+                <i class="fas fa-star"></i>
+                <p>No favorite folders yet</p>
+                <small>Add folders to favorites for quick access</small>
+            </div>
+        `;
         return;
     }
     
-    try {
-        // Fetch the prompt content
-        const response = await fetch(`/api/prompts/${selectedTemplateId}`);
-        
-        // Check response status before parsing JSON
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    favorites.forEach(folderPath => {
+        const folderName = folderPath.split(/[/\\]/).pop() || folderPath;
+        const item = document.createElement('div');
+        item.className = 'favorite-folder-item';
+        item.dataset.path = folderPath;
+        item.innerHTML = `
+            <div class="folder-info" onclick="selectFavoriteFolder('${folderPath}')">
+                <i class="fas fa-folder"></i>
+                <div>
+                    <div class="folder-name">${folderName}</div>
+                    <div class="folder-path">${folderPath}</div>
+                </div>
+            </div>
+            <button class="remove-favorite" onclick="removeFavoriteFolder('${folderPath}')" title="Remove from favorites">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        favoriteFoldersList.appendChild(item);
+    });
+}
+
+// Populate common directories list
+function populateCommonDirectories(directories) {
+    commonDirectoriesList.innerHTML = '';
+    
+    directories.forEach(dirPath => {
+        const dirName = dirPath.split(/[/\\]/).pop() || dirPath;
+        const item = document.createElement('div');
+        item.className = 'common-directory-item';
+        item.dataset.path = dirPath;
+        item.innerHTML = `
+            <i class="fas fa-folder"></i>
+            <div>
+                <div class="folder-name">${dirName}</div>
+                <div class="folder-path">${dirPath}</div>
+            </div>
+        `;
+        item.addEventListener('click', () => selectCommonDirectory(dirPath));
+        commonDirectoriesList.appendChild(item);
+    });
+}
+
+// Select favorite folder
+function selectFavoriteFolder(folderPath) {
+    downloadFolderPath.value = folderPath;
+    clearFolderSelections();
+    
+    // Highlight selected favorite
+    const items = favoriteFoldersList.querySelectorAll('.favorite-folder-item');
+    items.forEach(item => {
+        if (item.dataset.path === folderPath) {
+            item.classList.add('selected');
         }
+    });
+    
+    validateDownloadForm();
+}
+
+// Select common directory
+function selectCommonDirectory(dirPath) {
+    downloadFolderPath.value = dirPath;
+    clearFolderSelections();
+    
+    // Highlight selected common directory
+    const items = commonDirectoriesList.querySelectorAll('.common-directory-item');
+    items.forEach(item => {
+        if (item.dataset.path === dirPath) {
+            item.classList.add('selected');
+        }
+    });
+    
+    validateDownloadForm();
+}
+
+// Clear folder selections
+function clearFolderSelections() {
+    favoriteFoldersList.querySelectorAll('.favorite-folder-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+    commonDirectoriesList.querySelectorAll('.common-directory-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+}
+
+// Remove favorite folder
+async function removeFavoriteFolder(folderPath) {
+    try {
+        const response = await fetch('/api/folders/favorites', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ folderPath })
+        });
         
         const data = await response.json();
         
-        // Store the template and original content
-        currentPromptTemplate = selectedTemplateId;
-        originalPromptContent = data.content;
-        
-        // Load the content into the textarea
-        editedPromptTextarea.value = originalPromptContent;
-        
-        // Show the editor
-        promptEditorContainer.style.display = 'block';
-        promptEditorContainer.classList.add('active');
-        
-        // Reset the checkbox
-        useEditedPromptCheckbox.checked = false;
-        
-        // Update status
-        updatePromptStatus();
-        updatePromptLength();
-        
-        showNotification('Template loaded successfully. You can now edit the prompt.', 'success');
+        if (data.success) {
+            showNotification('Folder removed from favorites', 'success');
+            // Reload favorites list
+            loadDownloadModalData();
+        } else {
+            showNotification(data.error || 'Failed to remove folder from favorites', 'error');
+        }
     } catch (error) {
-        console.error('Error loading template content:', error);
-        showNotification(`Failed to load template content: ${error.message}`, 'error');
+        console.error('Error removing favorite folder:', error);
+        showNotification('Failed to remove folder from favorites', 'error');
     }
 }
 
-function handlePromptTextareaInput() {
-    updatePromptLength();
-    
-    // Check if content has been modified
-    const currentContent = editedPromptTextarea.value;
-    const isModified = currentContent !== originalPromptContent;
-    
-    // Update the checkbox state based on modification
-    if (isModified && !useEditedPromptCheckbox.checked) {
-        useEditedPromptCheckbox.checked = true;
-    } else if (!isModified && useEditedPromptCheckbox.checked) {
-        useEditedPromptCheckbox.checked = false;
+// Add current folder to favorites
+async function addCurrentFolderToFavorites() {
+    const folderPath = downloadFolderPath.value.trim();
+    if (!folderPath) return;
+    // Validate folder accessibility before adding
+    try {
+        const checkResponse = await fetch('/api/folders/browse');
+        const checkData = await checkResponse.json();
+        const allDirs = [...(checkData.commonDirectories || []), ...(checkData.favoriteFolders || [])];
+        if (!allDirs.includes(folderPath)) {
+            showNotification('Folder does not exist or is not accessible', 'error');
+            return;
+        }
+    } catch (error) {
+        showNotification('Failed to validate folder', 'error');
+        return;
     }
-    
-    updatePromptStatus();
+    try {
+        const response = await fetch('/api/folders/favorites', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ folderPath })
+        });
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            showNotification('Unexpected server response. Please check the server logs.', 'error');
+            return;
+        }
+        if (!response.ok) {
+            showNotification(data.error || 'Failed to add folder to favorites (server error)', 'error');
+            return;
+        }
+        if (data.success) {
+            showNotification('Folder added to favorites', 'success');
+            // Reload favorites list
+            loadDownloadModalData();
+        } else {
+            showNotification(data.error || 'Failed to add folder to favorites', 'error');
+        }
+    } catch (error) {
+        console.error('Error adding favorite folder:', error);
+        showNotification('Failed to add folder to favorites: ' + (error.message || error), 'error');
+    }
 }
 
-function handleUseEditedPromptChange() {
-    updatePromptStatus();
-    
-    if (useEditedPromptCheckbox.checked) {
-        showNotification('Edited prompt will be used for analysis.', 'info');
-    } else {
-        showNotification('Original template will be used for analysis.', 'info');
+// Save markdown to folder
+async function saveMarkdownToFolder(overwrite = false) {
+    if (!currentResult) {
+        showNotification('No analysis result to save', 'error');
+        return;
     }
-}
+    
+    const filename = downloadFilename.value.trim();
+    const folderPath = downloadFolderPath.value.trim();
+    
+    if (!filename || !folderPath) {
+        showNotification('Please enter both filename and folder path', 'error');
+        return;
+    }
+    // Save last used folder
+    localStorage.setItem('lastUsedFolder', folderPath);
+    
+    try {
+        saveMarkdownBtn.disabled = true;
+        saveMarkdownBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        
+        const response = await fetch('/api/download/save', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                content: currentResult.markdown,
+                filename: filename.endsWith('.md') ? filename : `${filename}.md`,
+                folderPath: folderPath,
+                overwrite: overwrite
+            })
+        });
+        
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            showNotification('Unexpected server response. Please check the server logs.', 'error');
+            return;
+        }
+        
+        if (!response.ok) {
+            showNotification(data.error || 'Failed to save file (server error)', 'error');
+            return;
+        }
+        
+        if (response.status === 409 && data.needsConfirmation) {
+            if (confirm('A file with this name already exists. Overwrite?')) {
+                await saveMarkdownToFolder(true);
+                return;
+            } else {
+                showNotification('File not saved (overwrite cancelled)', 'info');
+                return;
+            }
+        }
+        
+        if (data.success) {
+            showNotification(data.message, 'success');
+            hideDownloadModal();
+        } else {
+            showNotification(data.error || 'Failed to save file', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving markdown:', error);
+        showNotification('Failed to save file: ' + (error.message || error), 'error');
+    } finally {
+        saveMarkdownBtn.disabled = false;
+        saveMarkdownBtn.innerHTML = '<i class="fas fa-save"></i> Save File';
+    }
+} 
 
-function handleResetPrompt() {
-    if (currentPromptTemplate && originalPromptContent) {
-        editedPromptTextarea.value = originalPromptContent;
-        useEditedPromptCheckbox.checked = false;
-        updatePromptStatus();
-        updatePromptLength();
-        showNotification('Prompt reset to original template.', 'info');
-    }
-}
+// Keyboard navigation for download modal
+if (downloadModal) {
+    downloadModal.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            hideDownloadModal();
+        } else if (event.key === 'Enter') {
+            if (!saveMarkdownBtn.disabled) {
+                saveMarkdownToFolder();
+            }
+        }
+    });
+} 
 
-function updatePromptStatus() {
-    const isUsingEdited = useEditedPromptCheckbox.checked && editedPromptTextarea.value.trim() !== '';
-    
-    if (isUsingEdited) {
-        promptIndicator.className = 'prompt-indicator using-edited';
-        promptStatusText.textContent = 'Edited prompt will be used';
-    } else {
-        promptIndicator.className = 'prompt-indicator using-original';
-        promptStatusText.textContent = 'Original template will be used';
-    }
-}
-
-function updatePromptLength() {
-    const length = editedPromptTextarea.value.length;
-    const maxLength = 5000;
-    
-    promptLength.textContent = `${length} / ${maxLength} characters`;
-    
-    // Update color based on length
-    promptLength.className = 'prompt-length';
-    if (length > maxLength * 0.8) {
-        promptLength.classList.add('warning');
-    }
-    if (length > maxLength * 0.95) {
-        promptLength.classList.add('danger');
-    }
+function validateDownloadForm() {
+    const filename = downloadFilename.value ? downloadFilename.value.trim() : '';
+    const folderPath = downloadFolderPath.value ? downloadFolderPath.value.trim() : '';
+    const isValid = filename.length > 0 && folderPath.length > 0;
+    if (typeof saveMarkdownBtn !== 'undefined') saveMarkdownBtn.disabled = !isValid;
+    if (typeof addCurrentToFavoritesBtn !== 'undefined') addCurrentToFavoritesBtn.disabled = !folderPath.length > 0;
 } 

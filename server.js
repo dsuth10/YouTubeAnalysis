@@ -3,16 +3,10 @@ const cors = require('cors');
 const axios = require('axios');
 const { YoutubeTranscript } = require('youtube-transcript');
 const { Client } = require('@notionhq/client');
-const { ApifyClient } = require('apify-client');
-const getSubtitles = require('youtube-captions-scraper').getSubtitles;
-const { execFile, spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
-const os = require('os');
+const fileSystem = require('./utils/fileSystem');
 require('dotenv').config();
-const { exec } = require('child_process');
-
-// NOTE: Ensure the correct Python executable is used for transcript extraction. If you have multiple Python installations, update the execFile call in getTranscriptViaPython to use the full path if needed.
 
 // Global variable to cache prompts
 let cachedPrompts = null;
@@ -28,6 +22,7 @@ const notion = new Client({
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.static('public'));
 
 // Utility function to extract video ID from YouTube URL
 function extractVideoId(url) {
@@ -35,8 +30,7 @@ function extractVideoId(url) {
         /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
         /youtube\.com\/v\/([^&\n?#]+)/,
         /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
-        /youtube\.com\/shorts\/([^&\n?#]+)/,
-        /youtube\.com\/live\/([^&\n?#]+)/
+        /youtube\.com\/shorts\/([^&\n?#]+)/
     ];
     
     for (const pattern of patterns) {
@@ -51,123 +45,43 @@ function sanitizeFilename(filename) {
     return filename.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 }
 
-// Get transcript using python youtube-transcript-api
-function getTranscriptViaPython(videoId) {
-    return new Promise((resolve, reject) => {
-        const scriptPath = path.join(__dirname, 'scripts', 'get_transcript.py');
-        // Log the Python version and executable path for debugging
-        const { execSync } = require('child_process');
-        try {
-            const pythonVersion = execSync('python --version').toString().trim();
-            const whichCmd = process.platform === 'win32' ? 'where python' : 'which python';
-            const pythonPath = execSync(whichCmd).toString().trim();
-            console.log('Python version:', pythonVersion);
-            console.log('Python path:', pythonPath);
-        } catch (e) {
-            console.log('Could not determine Python version or path:', e.message);
-        }
-        // Use 'python' instead of 'python3' for better Windows compatibility
-        execFile('python', [scriptPath, videoId], { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
-            if (error) {
-                return reject(error);
-            }
-            const output = stdout.trim();
-            if (!output) {
-                return reject(new Error('No output from python script'));
-            }
-            try {
-                const data = JSON.parse(output);
-                if (Array.isArray(data)) {
-                    resolve(data.map(item => ({ text: item.text, start: item.start, duration: item.duration })));
-                } else if (data.error) {
-                    reject(new Error(data.error));
-                } else {
-                    reject(new Error('Unexpected output format'));
-                }
-            } catch (e) {
-                // If output isn't JSON assume it's plain text
-                resolve(output.split('\n').map(line => ({ text: line })));
-            }
-        });
-    });
+// ---- Subtitle parsing helpers ----
+function parseVttToText(vttContent) {
+    if (!vttContent || typeof vttContent !== 'string') return '';
+    const lines = vttContent
+        .replace(/^WEBVTT.*$/m, '')
+        .replace(/^NOTE[\s\S]*?(\n\n|$)/gm, '')
+        // Remove inline style blocks like '::cue {...}' entirely
+        .replace(/^::cue[\s\S]*?(\n\n|$)/gm, '')
+        .replace(/^STYLE[\s\S]*?(\n\n|$)/gm, '')
+        .split(/\r?\n/);
+
+    const textLines = [];
+    for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+        // Skip cue indexes (pure numbers)
+        if (/^\d+$/.test(line)) continue;
+        // Skip timestamp lines
+        if (/^\d{2}:\d{2}:\d{2}[\.,]\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}[\.,]\d{3}/.test(line)) continue;
+        textLines.push(line);
+    }
+    return textLines.join(' ').replace(/\s+/g, ' ').trim();
 }
 
-// Get transcript from Apify YouTube Transcript Scraper
-async function getTranscriptFromApify(videoId) {
-    if (!process.env.APIFY_API_KEY) {
-        throw new Error('Apify API key not configured');
+function parseSrtToText(srtContent) {
+    if (!srtContent || typeof srtContent !== 'string') return '';
+    const lines = srtContent.split(/\r?\n/);
+    const textLines = [];
+    for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+        // Skip index lines and timestamp lines
+        if (/^\d+$/.test(line)) continue;
+        if (/^\d{2}:\d{2}:\d{2}[\.,]\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}[\.,]\d{3}/.test(line)) continue;
+        textLines.push(line);
     }
-
-    console.log(`Attempting to get transcript via Apify for video: ${videoId}`);
-    
-    const client = new ApifyClient({
-        token: process.env.APIFY_API_KEY,
-    });
-
-    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    
-    try {
-        // Configure the task run
-        const runInput = {
-            start_urls: [{ url: videoUrl }]
-        };
-
-        console.log('Starting Apify task run...');
-        
-        // Run the task and wait for completion
-        const run = await client.task('dsuth10~test-youtube-structured-transcript-extractor-task').call(runInput);
-        
-        console.log(`Apify task run completed with ID: ${run.id}`);
-        
-        // Fetch results from the dataset
-        const { items } = await client.dataset(run.defaultDatasetId).listItems();
-        
-        if (items && items.length > 0) {
-            // Extract transcript from the first item
-            const transcriptData = items[0];
-            
-            if (transcriptData.transcript && transcriptData.transcript.length > 0) {
-                // Handle different transcript formats
-                let fullTranscript = '';
-                
-                if (Array.isArray(transcriptData.transcript)) {
-                    // If transcript is an array of objects with text property
-                    fullTranscript = transcriptData.transcript
-                        .map(item => item.text || item)
-                        .join(' ');
-                } else if (typeof transcriptData.transcript === 'string') {
-                    // If transcript is already a string
-                    fullTranscript = transcriptData.transcript;
-                }
-                
-                console.log(`Apify transcript extracted successfully (${fullTranscript.length} characters)`);
-                return fullTranscript.trim();
-            }
-        }
-        
-        throw new Error('No transcript data found in Apify response');
-        
-    } catch (error) {
-        console.error('Apify transcript extraction failed:', error.message);
-        throw error;
-    }
-}
-
-// Enhanced error handling for Apify
-function handleApifyError(error, videoId) {
-    console.error(`Apify transcript extraction failed for video ${videoId}:`, error.message);
-    
-    if (error.message.includes('Task not found')) {
-        console.error('Apify task not found - check task ID');
-    } else if (error.message.includes('insufficient funds')) {
-        console.error('Apify account has insufficient funds');
-    } else if (error.message.includes('rate limit')) {
-        console.error('Apify rate limit exceeded');
-    } else if (error.message.includes('timeout')) {
-        console.error('Apify task run timed out');
-    }
-    
-    return null;
+    return textLines.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 // Load and cache prompts from the prompts directory
@@ -279,7 +193,7 @@ async function getVideoMetadata(videoId) {
 
         const response = await axios.get(`https://www.googleapis.com/youtube/v3/videos`, {
             params: {
-                part: 'snippet,statistics,contentDetails',
+                part: 'snippet,statistics',
                 id: videoId,
                 key: apiKey
             }
@@ -297,7 +211,7 @@ async function getVideoMetadata(videoId) {
             description: video.snippet.description,
             viewCount: video.statistics.viewCount,
             likeCount: video.statistics.likeCount,
-            duration: video.contentDetails.duration,
+            duration: video.snippet.duration,
             tags: video.snippet.tags || []
         };
     } catch (error) {
@@ -306,476 +220,20 @@ async function getVideoMetadata(videoId) {
     }
 }
 
-// Removed: Direct caption content download via YouTube Data API is not supported for third-party videos.
-
-// Helper to parse SRT to plain text
-function parseSrtToText(srt) {
-    return srt
-        .split('\n\n')
-        .map(block => {
-            const lines = block.split('\n');
-            // Remove index and timecode lines
-            return lines.slice(2).join(' ');
-        })
-        .filter(Boolean)
-        .join(' ');
-}
-
-// Helper to parse VTT to plain text
-function parseVttToText(vtt) {
-    if (!vtt || typeof vtt !== 'string') return '';
-    const lines = vtt
-        .split('\n')
-        // Drop WEBVTT header and NOTE/STYLE blocks entirely
-        .filter((line) => {
-            const trimmed = line.trim();
-            if (!trimmed) return true; // keep empty lines for cue separation
-            if (trimmed === 'WEBVTT') return false;
-            if (trimmed.startsWith('NOTE')) return false;
-            if (trimmed.startsWith('STYLE')) return false;
-            return true;
-        });
-
-    const blocks = lines.join('\n').split(/\n\n+/);
-    const textParts = [];
-    for (const block of blocks) {
-        const blines = block.split('\n').map(l => l.trim()).filter(Boolean);
-        if (blines.length === 0) continue;
-        // Skip identifier line if present; skip timecode line
-        let i = 0;
-        // If first line looks like an identifier (not a timecode and not text), skip it
-        const timecodeRegex = /\d{1,2}:\d{2}:\d{2}\.\d{3}\s+-->\s+\d{1,2}:\d{2}:\d{2}\.\d{3}/;
-        if (!timecodeRegex.test(blines[0]) && blines.length >= 2 && timecodeRegex.test(blines[1])) {
-            i = 2; // skip id and timecode
-        } else if (timecodeRegex.test(blines[0])) {
-            i = 1; // skip timecode only
-        }
-        const text = blines.slice(i).join(' ')
-            // Drop any remaining vtt tags like <c.color>...</c>, <b>, <i>, <u>
-            .replace(/<[^>]+>/g, '')
-            .trim();
-        if (text) textParts.push(text);
-    }
-    return textParts.join(' ');
-}
-
-// Primary: Get transcript using yt-dlp subtitles (VTT/SRT)
-async function getTranscriptViaYtDlp(videoId) {
-    const startTs = Date.now();
-    const ytDlpBin = process.env.YT_DLP_PATH && process.env.YT_DLP_PATH.trim() !== ''
-        ? process.env.YT_DLP_PATH.trim()
-        : 'yt-dlp';
-
-    // Prepare temp directory
-    const tmpBase = path.join(os.tmpdir(), 'youtube-analysis-');
-    const tempDir = await fs.mkdtemp(tmpBase);
-
-    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-    // Language and format preferences (env override allowed)
-    const subLangs = (process.env.YT_DLP_SUB_LANGS && process.env.YT_DLP_SUB_LANGS.trim()) || 'en.*,en';
-    const subFormats = (process.env.YT_DLP_SUB_FORMATS && process.env.YT_DLP_SUB_FORMATS.trim()) || 'vtt/srt/best';
-
-    // Build args
-    const args = [
-        '--skip-download',
-        '--no-playlist',
-        '--write-subs',
-        '--write-auto-subs',
-        '--sub-langs', subLangs,
-        '--sub-format', subFormats,
-        '-P', tempDir,
-        // Ensure subtitles go to tempDir and include language in filename
-        '-o', 'subtitle:%(id)s.%(lang)s.%(ext)s',
-    ];
-
-    // Cookies handling: only apply if explicitly configured
-    const cookiesCfgRaw = process.env.YT_DLP_COOKIES || '';
-    const cookiesCfg = cookiesCfgRaw.trim().toLowerCase();
-    if (cookiesCfg && cookiesCfg.startsWith('browser:')) {
-        const browser = cookiesCfgRaw.split(':')[1] || 'edge';
-        args.push('--cookies-from-browser', browser);
-    } else if (cookiesCfg && cookiesCfg.startsWith('file:')) {
-        const filePath = cookiesCfgRaw.slice(5);
-        args.push('--cookies', filePath);
-    }
-
-    // Optional User-Agent
-    if (process.env.YT_DLP_USER_AGENT && process.env.YT_DLP_USER_AGENT.trim() !== '') {
-        args.push('--user-agent', process.env.YT_DLP_USER_AGENT.trim());
-    }
-
-    // Use Android client to avoid Po token/SABR issues for subs
-    args.push('--extractor-args', 'youtube:player_client=android');
-    args.push(videoUrl);
-
-    console.log('[yt-dlp] Executing:', ytDlpBin, args.join(' '));
-
-    // Spawn yt-dlp
-    const child = spawn(ytDlpBin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stderr = '';
-    child.stderr.on('data', (d) => { stderr += d.toString(); });
-
-    const exitCode = await new Promise((resolve, reject) => {
-        child.on('error', reject);
-        child.on('close', resolve);
-    });
-    try {
-        // Find any .vtt or .srt file in tempDir (even if exitCode non-zero due to warnings)
-        const files = await fs.readdir(tempDir);
-        const vtt = files.find(f => f.toLowerCase().endsWith('.vtt'));
-        const srt = files.find(f => f.toLowerCase().endsWith('.srt'));
-
-        if (!vtt && !srt) {
-            if (exitCode !== 0) {
-                throw new Error(`yt-dlp failed with code ${exitCode}: ${stderr.slice(0, 500)}`);
-            }
-            throw new Error('No subtitle files produced by yt-dlp');
-        }
-
-        let transcript = '';
-        if (vtt) {
-            const vttContent = await fs.readFile(path.join(tempDir, vtt), 'utf8');
-            transcript = parseVttToText(vttContent);
-        } else if (srt) {
-            const srtContent = await fs.readFile(path.join(tempDir, srt), 'utf8');
-            transcript = parseSrtToText(srtContent);
-        }
-
-        transcript = (transcript || '').trim();
-        const ms = Date.now() - startTs;
-        if (transcript) {
-            console.log(`[yt-dlp] Transcript extracted (${transcript.length} chars) in ${ms} ms`);
-            return transcript;
-        }
-        throw new Error('Transcript parsed from subtitles is empty');
-    } finally {
-        // Cleanup temp dir
-        try {
-            await fs.rm(tempDir, { recursive: true, force: true });
-        } catch (e) {
-            // ignore cleanup errors
-        }
-    }
-}
-
-function segmentsToText(segments) {
-    try {
-        if (!Array.isArray(segments)) return '';
-        return segments.map(item => (item && typeof item.text === 'string') ? item.text : '').filter(Boolean).join(' ');
-    } catch {
-        return '';
-    }
-}
-
-// Get video transcript (returns { text, source, attempts })
+// Get video transcript
 async function getVideoTranscript(videoId) {
     try {
-        console.log(`Fetching transcript for video ID: ${videoId}`);
-
-        // Try multiple approaches to get transcript
-        let text = '';
-        let lastError = null;
-        let source = null;
-        const attempts = [];
-
-        // Method -1: yt-dlp subtitles (preferred)
-        try {
-            const t0 = Date.now();
-            const t = await getTranscriptViaYtDlp(videoId);
-            attempts.push({ method: 'yt_dlp_subtitles', ok: !!t, ms: Date.now() - t0 });
-            if (t) {
-                text = t;
-                source = 'subs_ytdlp';
-                console.log('Method -1 (yt-dlp subtitles) succeeded');
-            }
-        } catch (err) {
-            attempts.push({ method: 'yt_dlp_subtitles', ok: false, error: err.message });
-            console.log('Method -1 failed:', err.message);
-            lastError = err;
-        }
-
-        // Method 0: python youtube-transcript-api
-        if (!text) {
-            try {
-                const t0 = Date.now();
-                const segs = await getTranscriptViaPython(videoId);
-                const t = segmentsToText(segs);
-                attempts.push({ method: 'python_youtube_transcript_api', ok: !!t, ms: Date.now() - t0 });
-                if (t) {
-                    text = t;
-                    source = 'subs_python';
-                    console.log('Method 0 (python youtube-transcript-api) succeeded');
-                }
-            } catch (err) {
-                attempts.push({ method: 'python_youtube_transcript_api', ok: false, error: err.message });
-                console.log('Method 0 failed:', err.message);
-                lastError = err;
-            }
-        }
-
-        // Method 1: Try default fetch
-        if (!text) {
-            try {
-                const t0 = Date.now();
-                const segs = await YoutubeTranscript.fetchTranscript(videoId);
-                const t = segmentsToText(segs);
-                attempts.push({ method: 'youtube_transcript_default', ok: !!t, ms: Date.now() - t0 });
-                if (t) {
-                    text = t;
-                    source = 'subs_js_default';
-                    console.log('Method 1 (default) succeeded');
-                }
-            } catch (err) {
-                attempts.push({ method: 'youtube_transcript_default', ok: false, error: err.message });
-                console.log('Method 1 failed:', err.message);
-                lastError = err;
-            }
-        }
-        
-        // Method 2: Try with English language specification
-        if (!text) {
-            try {
-                const t0 = Date.now();
-                const segs = await YoutubeTranscript.fetchTranscript(videoId, { lang: 'en' });
-                const t = segmentsToText(segs);
-                attempts.push({ method: 'youtube_transcript_en', ok: !!t, ms: Date.now() - t0 });
-                if (t) {
-                    text = t;
-                    source = 'subs_js_en';
-                    console.log('Method 2 (English) succeeded');
-                }
-            } catch (err) {
-                attempts.push({ method: 'youtube_transcript_en', ok: false, error: err.message });
-                console.log('Method 2 failed:', err.message);
-                lastError = err;
-            }
-        }
-        
-        // Method 3: Try with different language codes
-        if (!text) {
-            const languageCodes = ['en-US', 'en-GB', 'en-CA', 'en-AU'];
-            for (const langCode of languageCodes) {
-                try {
-                    const t0 = Date.now();
-                    const segs = await YoutubeTranscript.fetchTranscript(videoId, { lang: langCode });
-                    const t = segmentsToText(segs);
-                    attempts.push({ method: `youtube_transcript_${langCode}`, ok: !!t, ms: Date.now() - t0 });
-                    if (t) {
-                        text = t;
-                        source = `subs_js_${langCode}`;
-                        console.log(`Method 3 (${langCode}) succeeded`);
-                        break;
-                    }
-                } catch (err) {
-                    attempts.push({ method: `youtube_transcript_${langCode}`, ok: false, error: err.message });
-                    console.log(`Method 3 (${langCode}) failed:`, err.message);
-                    lastError = err;
-                }
-            }
-        }
-        
-        // Method 4: Fallback to youtube-captions-scraper
-        if (!text) {
-            try {
-                console.log('Trying fallback method with youtube-captions-scraper...');
-                const t0 = Date.now();
-                const subtitles = await getSubtitles({
-                    videoID: videoId,
-                    lang: 'en'
-                });
-                
-                if (subtitles && subtitles.length > 0) {
-                    const t = segmentsToText(subtitles.map(item => ({ text: item.text })));
-                    attempts.push({ method: 'scraper', ok: !!t, ms: Date.now() - t0 });
-                    if (t) {
-                        text = t;
-                        source = 'subs_scraper';
-                    }
-                    console.log('Method 4 (fallback scraper) succeeded');
-                }
-            } catch (err) {
-                attempts.push({ method: 'scraper', ok: false, error: err.message });
-                console.log('Method 4 failed:', err.message);
-                lastError = err;
-            }
-        }
-        
-        // Method 5: Apify Actor Fallback
-        if (!text) {
-            try {
-                console.log('Method 5: Trying Apify YouTube Transcript Scraper...');
-                const t0 = Date.now();
-                const t = await getTranscriptFromApify(videoId);
-                attempts.push({ method: 'apify', ok: !!t, ms: Date.now() - t0 });
-                if (t) {
-                    text = t;
-                    source = 'subs_apify';
-                    console.log('Method 5 (Apify) succeeded');
-                }
-            } catch (err) {
-                console.log('Method 5 (Apify) failed:', err.message);
-                attempts.push({ method: 'apify', ok: false, error: err.message });
-                lastError = err;
-            }
-        }
-        // Final Fallback: ASR transcription via provider if all above failed
-        if (!text) {
-            try {
-                console.log('Method 6: Trying ASR fallback via provider...');
-                const { audioPath, tempDir } = await downloadAudioViaYtDlp(videoId);
-                const t0 = Date.now();
-                try {
-                    const provider = (process.env.TRANSCRIBE_PROVIDER || 'openai').toLowerCase();
-                    const t = await transcribeAudioByProvider(audioPath, provider);
-                    const ms = Date.now() - t0;
-                    if (t && t.trim()) {
-                        text = t;
-                        source = `asr_${provider}`;
-                        console.log(`Method 6 (ASR:${provider}) succeeded in ${ms} ms`);
-                    } else {
-                        throw new Error('ASR returned empty transcript');
-                    }
-                } finally {
-                    // cleanup temp files
-                    try { await fs.rm(tempDir, { recursive: true, force: true }); } catch {}
-                }
-            } catch (err) {
-                console.log('Method 6 (ASR) failed:', err.message);
-                attempts.push({ method: 'asr', ok: false, error: err.message });
-                lastError = err;
-            }
-        }
-        
-        if (!text || text.trim().length === 0) {
-            console.log('All methods failed - no transcript data found');
-            throw new Error(`No transcript data found for this video. Last error: ${lastError ? lastError.message : 'Unknown'}`);
-        }
-        
-        console.log(`Transcript fetched successfully. Length: ${text.length} characters`);
-        console.log('First 200 characters:', text.substring(0, 200));
-        return { text, source, attempts };
+        const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
+        const text = transcriptItems.map(item => item.text).join(' ');
+        return { text, source: 'captions' };
     } catch (error) {
         console.error('Error fetching transcript:', error.message);
-        console.error('Full error:', error);
-        throw new Error(`Could not fetch transcript: ${error.message}`);
+        throw new Error('Could not fetch transcript. The video may not have captions enabled.');
     }
-}
-
-// ===== ASR Fallback Utilities =====
-async function downloadAudioViaYtDlp(videoId) {
-    const ytDlpBin = process.env.YT_DLP_PATH && process.env.YT_DLP_PATH.trim() !== ''
-        ? process.env.YT_DLP_PATH.trim()
-        : 'yt-dlp';
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'youtube-analysis-audio-'));
-    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const outTpl = '%(id)s.%(ext)s';
-    const args = [
-        '-f', 'm4a/bestaudio',
-        '-P', tempDir,
-        '-o', outTpl,
-        '--no-playlist',
-    ];
-
-    const cookiesCfgRaw = process.env.YT_DLP_COOKIES || '';
-    const cookiesCfg = cookiesCfgRaw.trim().toLowerCase();
-    if (cookiesCfg && cookiesCfg.startsWith('browser:')) {
-        const browser = cookiesCfgRaw.split(':')[1] || 'edge';
-        args.push('--cookies-from-browser', browser);
-    } else if (cookiesCfg && cookiesCfg.startsWith('file:')) {
-        const filePath = cookiesCfgRaw.slice(5);
-        args.push('--cookies', filePath);
-    }
-    if (process.env.YT_DLP_USER_AGENT && process.env.YT_DLP_USER_AGENT.trim() !== '') {
-        args.push('--user-agent', process.env.YT_DLP_USER_AGENT.trim());
-    }
-    // Use Android client to avoid Po token/SABR issues for audio
-    args.push('--extractor-args', 'youtube:player_client=android');
-    args.push(videoUrl);
-
-    console.log('[yt-dlp][audio] Executing:', ytDlpBin, args.join(' '));
-    const child = spawn(ytDlpBin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stderr = '';
-    child.stderr.on('data', d => { stderr += d.toString(); });
-    const code = await new Promise((resolve, reject) => {
-        child.on('error', reject);
-        child.on('close', resolve);
-    });
-    if (code !== 0) {
-        try { await fs.rm(tempDir, { recursive: true, force: true }); } catch {}
-        throw new Error(`yt-dlp audio download failed code ${code}: ${stderr.slice(0,500)}`);
-    }
-    const files = await fs.readdir(tempDir);
-    const audio = files.find(f => /\.(m4a|mp3|webm|wav|ogg)$/i.test(f));
-    if (!audio) {
-        try { await fs.rm(tempDir, { recursive: true, force: true }); } catch {}
-        throw new Error('No audio file produced by yt-dlp');
-    }
-    return { audioPath: path.join(tempDir, audio), tempDir };
-}
-
-async function transcribeAudioByProvider(filePath, provider) {
-    switch ((provider || '').toLowerCase()) {
-        case 'openai':
-            return await transcribeWithOpenAI(filePath);
-        case 'assemblyai':
-            return await transcribeWithAssemblyAI(filePath);
-        case 'deepgram':
-            return await transcribeWithDeepgram(filePath);
-        default:
-            console.log(`Unknown TRANSCRIBE_PROVIDER '${provider}', defaulting to openai`);
-            return await transcribeWithOpenAI(filePath);
-    }
-}
-
-async function transcribeWithOpenAI(filePath) {
-    const key = process.env.OPENAI_API_KEY;
-    if (!key) throw new Error('OPENAI_API_KEY not configured');
-    const model = (process.env.OPENAI_WHISPER_MODEL && process.env.OPENAI_WHISPER_MODEL.trim()) || 'whisper-1';
-
-    const FormData = require('form-data');
-    const fsSync = require('fs');
-    const form = new FormData();
-    form.append('file', fsSync.createReadStream(filePath));
-    form.append('model', model);
-
-    const headers = {
-        ...form.getHeaders(),
-        Authorization: `Bearer ${key}`,
-    };
-    const url = 'https://api.openai.com/v1/audio/transcriptions';
-    const t0 = Date.now();
-    const resp = await axios.post(url, form, { headers, maxBodyLength: Infinity, maxContentLength: Infinity });
-    const ms = Date.now() - t0;
-    if (!resp.data || typeof resp.data.text !== 'string') {
-        throw new Error('OpenAI Whisper response missing text');
-    }
-    console.log(`[ASR OpenAI] Transcription completed in ${ms} ms`);
-    return resp.data.text.trim();
-}
-
-async function transcribeWithAssemblyAI(filePath) {
-    const key = process.env.ASSEMBLYAI_API_KEY;
-    if (!key) {
-        console.log('AssemblyAI API key not configured');
-        return '';
-    }
-    console.log('AssemblyAI transcription not yet implemented');
-    return '';
-}
-
-async function transcribeWithDeepgram(filePath) {
-    const key = process.env.DEEPGRAM_API_KEY;
-    if (!key) {
-        console.log('Deepgram API key not configured');
-        return '';
-    }
-    console.log('Deepgram transcription not yet implemented');
-    return '';
 }
 
 // Analyze content with OpenRouter API
-async function analyzeContent(transcript, videoInfo, model, promptId = null, tokenLimit = 10000, editedPrompt = null) {
+async function analyzeContent(transcript, videoInfo, model, promptId = null) {
     try {
         const apiKey = process.env.OPENROUTER_API_KEY;
         if (!apiKey) {
@@ -784,10 +242,7 @@ async function analyzeContent(transcript, videoInfo, model, promptId = null, tok
 
         let promptContent;
         
-        // Use edited prompt if provided, otherwise use template
-        if (editedPrompt && editedPrompt.trim() !== '') {
-            promptContent = editedPrompt.trim();
-        } else if (promptId) {
+        if (promptId) {
             // Load custom prompt
             const prompts = await getPrompts();
             const selectedPrompt = prompts.find(p => p.id === promptId);
@@ -828,14 +283,10 @@ Format your response in clean markdown with proper headings and bullet points. F
         }
 
         // Replace placeholders in the prompt
-        const descSnippet = (transcript && transcript.length > 0)
-            ? (videoInfo.description.length > 500 ? videoInfo.description.substring(0, 500) + '...' : videoInfo.description)
-            : videoInfo.description;
-
         const processedPrompt = promptContent
             .replace(/\{\{title\}\}/g, videoInfo.title)
             .replace(/\{\{channel\}\}/g, videoInfo.channelTitle)
-            .replace(/\{\{description\}\}/g, descSnippet)
+            .replace(/\{\{description\}\}/g, videoInfo.description.substring(0, 500) + '...')
             .replace(/\{\{transcript\}\}/g, transcript);
 
         const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
@@ -850,7 +301,7 @@ Format your response in clean markdown with proper headings and bullet points. F
                     content: processedPrompt
                 }
             ],
-            max_tokens: tokenLimit,
+            max_tokens: 2000,
             temperature: 0.3
         }, {
             headers: {
@@ -877,7 +328,7 @@ async function generateTitle(transcript, videoInfo, model) {
         const titlePrompt = `You are an AI assistant that creates concise instructional titles for YouTube videos.
 
 Video Title: ${videoInfo.title}
-Video Description: ${videoInfo.description.length > 500 ? videoInfo.description.substring(0, 500) + '...' : videoInfo.description}
+Video Description: ${videoInfo.description.substring(0, 500)}...
 Transcript: ${transcript}
 
 Task: Write a concise 5–10 word instructional title summarizing the main focus of this video. The title should clearly instruct or convey the key action or topic of the content.
@@ -915,7 +366,7 @@ Output only the title (5–10 words):`;
 }
 
 // Generate markdown content
-function generateMarkdown(videoInfo, analysis, generatedTitle, hasTranscript = false) {
+function generateMarkdown(videoInfo, analysis, generatedTitle) {
     const publishDate = new Date(videoInfo.publishedAt).toLocaleDateString('en-AU', {
         year: 'numeric',
         month: 'long',
@@ -927,16 +378,16 @@ title: "${generatedTitle}"
 url: "https://youtu.be/${videoInfo.videoId}"
 channel: "${videoInfo.channelTitle}"
 published: "${publishDate}"
-views: ${videoInfo.viewCount || 0}
-likes: ${videoInfo.likeCount || 0}
+views: ${videoInfo.viewCount}
+likes: ${videoInfo.likeCount}
 ---
 
 # ${generatedTitle} (YouTube Summary)
 
 **Channel:** ${videoInfo.channelTitle}  
 **Published:** ${publishDate}  
-**Views:** ${videoInfo.viewCount ? parseInt(videoInfo.viewCount).toLocaleString() : 'N/A'}
-**Likes:** ${videoInfo.likeCount ? parseInt(videoInfo.likeCount).toLocaleString() : 'N/A'}
+**Views:** ${parseInt(videoInfo.viewCount).toLocaleString()}  
+**Likes:** ${parseInt(videoInfo.likeCount).toLocaleString()}  
 **URL:** [https://youtu.be/${videoInfo.videoId}](https://youtu.be/${videoInfo.videoId})
 
 ## Original YouTube Description
@@ -948,37 +399,16 @@ ${analysis}
 
 ---
 
-*This summary was generated using AI analysis of the video ${hasTranscript ? 'transcript' : 'description (no transcript available)'}.*
+*This summary was generated using AI analysis of the video transcript.*
 `;
 
     return markdown;
 }
 
-// yt-dlp health check endpoint
-app.get('/api/yt-dlp-health-check', async (req, res) => {
-    try {
-        const ytDlpBin = process.env.YT_DLP_PATH && process.env.YT_DLP_PATH.trim() !== ''
-            ? process.env.YT_DLP_PATH.trim()
-            : 'yt-dlp';
-        exec(`${ytDlpBin} --version`, { timeout: 8000 }, (err, stdout, stderr) => {
-            if (err) {
-                return res.status(200).json({ ok: false, message: `yt-dlp not available or misconfigured: ${err.message}` });
-            }
-            const version = (stdout || '').trim();
-            return res.json({ ok: true, message: `yt-dlp available: ${version}` });
-        });
-    } catch (e) {
-        return res.status(200).json({ ok: false, message: `Health check error: ${e.message}` });
-    }
-});
-
-// In-memory cache for last raw subtitles to support download
-const rawSubsCache = new Map(); // key: videoId, value: { content, type, filename }
-
 // Main endpoint for processing videos
 app.post('/api/process', async (req, res) => {
     try {
-        const { url, model, promptId, tokenLimit, manualTranscript, editedPrompt } = req.body;
+        const { url, model, promptId } = req.body;
         
         if (!url) {
             return res.status(400).json({ error: 'YouTube URL is required' });
@@ -995,63 +425,10 @@ app.post('/api/process', async (req, res) => {
         videoInfo.videoId = videoId;
 
         // Get transcript
-        let transcript;
-        let transcriptStatus = 'not_available';
-        let transcriptMeta = null;
-        
-        if (manualTranscript && manualTranscript.trim().length > 0) {
-            transcript = manualTranscript.trim();
-            transcriptStatus = 'manual';
-            console.log('Manual transcript provided by user. Skipping extraction.');
-        } else {
-            try {
-                const result = await getVideoTranscript(videoId);
-                transcript = result?.text || '';
-                transcriptMeta = { source: result?.source || null, attempts: result?.attempts || [] };
-                console.log(`Transcript received in main process. Length: ${transcript ? transcript.length : 'null'} characters`);
-                if (transcript && transcript.length > 0) {
-                    transcriptStatus = transcriptMeta?.source || 'available';
-                }
-            } catch (transcriptError) {
-                console.log('Transcript extraction failed, proceeding without transcript');
-                console.log('Transcript error details:', transcriptError.message);
-                transcript = '';
-                transcriptStatus = 'failed';
-            }
-        }
-        
-        // Check if captions exist via YouTube API (capability check only; cannot download third-party caption content)
-        try {
-            const apiKey = process.env.YOUTUBE_API_KEY;
-            if (apiKey) {
-                const captionsResponse = await axios.get('https://www.googleapis.com/youtube/v3/captions', {
-                    params: {
-                        part: 'snippet',
-                        videoId: videoId,
-                        key: apiKey
-                    }
-                });
-                
-                if (captionsResponse.data.items && captionsResponse.data.items.length > 0) {
-                    const englishCaptions = captionsResponse.data.items.filter(caption => 
-                        caption.snippet.language === 'en'
-                    );
-                    
-                    if (englishCaptions.length > 0) {
-                        console.log(`YouTube API shows ${englishCaptions.length} English caption tracks available (visibility only).`);
-                        console.log('Note: YouTube Data API does not provide caption content for third-party videos via API key; using alternative extraction methods (yt-dlp/ASR).');
-                        if (transcriptStatus === 'failed') {
-                            transcriptStatus = 'api_available_but_extraction_failed';
-                        }
-                    }
-                }
-            }
-        } catch (apiError) {
-            console.log('Could not check caption availability via YouTube API:', apiError.message);
-        }
+        const transcript = await getVideoTranscript(videoId);
 
-        // Analyze content with selected prompt and token limit
-        const analysis = await analyzeContent(transcript, videoInfo, model || 'openai/gpt-3.5-turbo', promptId, tokenLimit, editedPrompt);
+        // Analyze content with selected prompt
+        const analysis = await analyzeContent(transcript, videoInfo, model || 'openai/gpt-3.5-turbo', promptId);
 
         // Generate title
         const title = await generateTitle(transcript, videoInfo, model || 'openai/gpt-3.5-turbo');
@@ -1061,7 +438,7 @@ app.post('/api/process', async (req, res) => {
         videoInfo.generatedTitle = title;
 
         // Generate markdown
-        const markdown = generateMarkdown(videoInfo, analysis, title, !!transcript);
+        const markdown = generateMarkdown(videoInfo, analysis, title);
 
         // Create filename
         const filename = `${sanitizeFilename(title)}_${Date.now()}.md`;
@@ -1077,63 +454,19 @@ app.post('/api/process', async (req, res) => {
         const filePath = path.join(outputDir, filename);
         await fs.writeFile(filePath, markdown, 'utf8');
 
-        const responseData = {
+        res.json({
             success: true,
             filename: filename,
             filePath: filePath,
             markdown: markdown,
-            videoInfo: videoInfo,
-            transcript: transcript,
-            rawDescription: videoInfo.description,
-            transcriptStatus: transcriptStatus,
-            transcriptMeta
-        };
-
-        // Stash raw subtitles if present in transcriptMeta.attempts context (only for yt-dlp path currently)
-        try {
-            if (transcriptMeta && transcriptMeta.source === 'subs_ytdlp') {
-                // Not stored yet; we can re-run a minimal fetch to get raw subs
-                // For now, leave rawSubsCache empty to avoid repeated yt-dlp calls here.
-                // Task 21 will expose endpoint; population can be done on demand.
-            }
-        } catch {}
-        
-        console.log(`Sending response with transcript length: ${transcript ? transcript.length : 'null'} characters`);
-        console.log(`Response data keys: ${Object.keys(responseData)}`);
-        
-        res.json(responseData);
+            videoInfo: videoInfo
+        });
 
     } catch (error) {
         console.error('Error processing video:', error);
         res.status(500).json({ 
             error: error.message || 'An error occurred while processing the video' 
         });
-    }
-});
-
-// Provide raw subtitles download if available on demand by rerunning a minimal yt-dlp subtitle fetch
-app.get('/api/download-raw-subs/:videoId', async (req, res) => {
-    const { videoId } = req.params;
-    if (!videoId) return res.status(400).send('Missing videoId');
-    try {
-        // If cached, serve from memory
-        if (rawSubsCache.has(videoId)) {
-            const entry = rawSubsCache.get(videoId);
-            res.setHeader('Content-Type', entry.type);
-            res.setHeader('Content-Disposition', `attachment; filename="${entry.filename}"`);
-            return res.send(entry.content);
-        }
-
-        // Otherwise, perform a fresh yt-dlp subtitle fetch quickly
-        const subText = await getTranscriptViaYtDlp(videoId);
-        // getTranscriptViaYtDlp parsed into text; we need raw. For simplicity, inform user raw may be unavailable.
-        // Minimal viable: return the plain text as .txt when raw not retained.
-        const filename = `${videoId}.txt`;
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        return res.send(subText || '');
-    } catch (e) {
-        return res.status(500).send(`Failed to obtain subtitles: ${e.message}`);
     }
 });
 
@@ -1145,24 +478,6 @@ app.get('/api/prompts', async (req, res) => {
     } catch (error) {
         console.error('Error fetching prompts:', error);
         res.status(500).json({ error: 'Failed to load prompts' });
-    }
-});
-
-// Get individual prompt content
-app.get('/api/prompts/:promptId', async (req, res) => {
-    try {
-        const { promptId } = req.params;
-        const prompts = await getPrompts();
-        const selectedPrompt = prompts.find(p => p.id === promptId);
-        
-        if (!selectedPrompt) {
-            return res.status(404).json({ error: 'Prompt not found' });
-        }
-        
-        res.json({ content: selectedPrompt.content });
-    } catch (error) {
-        console.error('Error fetching prompt content:', error);
-        res.status(500).json({ error: 'Failed to load prompt content' });
     }
 });
 
@@ -1190,7 +505,6 @@ app.get('/api/health', async (req, res) => {
             youtubeApi: !!process.env.YOUTUBE_API_KEY,
             openrouterApi: !!process.env.OPENROUTER_API_KEY,
             notionApi: !!process.env.NOTION_TOKEN,
-            apifyApi: !!process.env.APIFY_API_KEY,
             prompts: prompts.length,
             timestamp: new Date().toISOString()
         });
@@ -1486,7 +800,7 @@ function createChildPageBlocks(videoInfo, markdown) {
         paragraph: {
             rich_text: [
                 { type: 'text', text: { content: 'Views: ' }, annotations: { bold: true } },
-                { type: 'text', text: { content: videoInfo.viewCount ? parseInt(videoInfo.viewCount).toLocaleString() : 'N/A' } }
+                { type: 'text', text: { content: parseInt(videoInfo.viewCount).toLocaleString() } }
             ]
         }
     });
@@ -1496,7 +810,7 @@ function createChildPageBlocks(videoInfo, markdown) {
         paragraph: {
             rich_text: [
                 { type: 'text', text: { content: 'Likes: ' }, annotations: { bold: true } },
-                { type: 'text', text: { content: videoInfo.likeCount ? parseInt(videoInfo.likeCount).toLocaleString() : 'N/A' } }
+                { type: 'text', text: { content: parseInt(videoInfo.likeCount).toLocaleString() } }
             ]
         }
     });
@@ -1575,16 +889,7 @@ function createChildPageBlocks(videoInfo, markdown) {
 
 // Parse markdown to Notion blocks
 function parseMarkdownToNotionBlocks(markdown) {
-    let lines = markdown.split('\n');
-    // Remove YAML front matter if present
-    if (lines[0].trim() === '---') {
-        let end = 1;
-        while (end < lines.length && lines[end].trim() !== '---') {
-            end++;
-        }
-        lines = lines.slice(end + 1);
-    }
-    
+    const lines = markdown.split('\n');
     const blocks = [];
     let currentList = null;
     let currentListType = null;
@@ -1907,133 +1212,115 @@ app.post('/api/saveToNotion', async (req, res) => {
     }
 });
 
-// Get processed prompt endpoint
-app.post('/api/getPrompt', async (req, res) => {
+// File System API Endpoints
+
+// Get favorite folders
+app.get('/api/folders/favorites', async (req, res) => {
     try {
-        const { url, promptId, model, manualTranscript } = req.body;
-        
-        if (!url) {
-            return res.status(400).json({ error: 'YouTube URL is required' });
-        }
-
-        // Extract video ID
-        const videoId = extractVideoId(url);
-        if (!videoId) {
-            return res.status(400).json({ error: 'Invalid YouTube URL' });
-        }
-
-        // Get video metadata
-        const videoInfo = await getVideoMetadata(videoId);
-        videoInfo.videoId = videoId;
-
-        // Get transcript (manual overrides everything)
-        let transcript = '';
-        if (manualTranscript && typeof manualTranscript === 'string' && manualTranscript.trim().length > 0) {
-            transcript = manualTranscript.trim();
-        } else {
-            const result = await getVideoTranscript(videoId);
-            transcript = result?.text || '';
-        }
-
-        // Get prompt content
-        let promptContent;
-        
-        if (promptId) {
-            // Load custom prompt
-            const prompts = await getPrompts();
-            const selectedPrompt = prompts.find(p => p.id === promptId);
-            
-            if (!selectedPrompt) {
-                throw new Error(`Prompt with ID '${promptId}' not found`);
-            }
-            
-            promptContent = selectedPrompt.content;
-        } else {
-            // Use default prompt
-            promptContent = `You are an assistant that extracts key information from YouTube video transcripts. 
-
-Video Title: {{title}}
-Channel: {{channel}}
-Description: {{description}}
-
-Transcript: {{transcript}}
-
-Please analyze this video and provide a comprehensive summary in the following format:
-
-## Topics Covered
-- List the main topics and subjects discussed in the video
-
-## Key Workflows/Processes
-- Describe any step-by-step processes, workflows, or procedures mentioned
-
-## Important Concepts
-- Define and explain key concepts, terms, or ideas presented
-
-## Learnings/Takeaways
-- List the main insights, lessons, or actionable takeaways
-
-## Suggested Tags
-- Provide 5-10 relevant tags for categorizing this content
-
-Format your response in clean markdown with proper headings and bullet points. Focus on extracting the most valuable and actionable information from the video.`;
-        }
-
-        // Replace placeholders in the prompt
-        const descSnippet = (transcript && transcript.length > 0)
-            ? (videoInfo.description.length > 500 ? videoInfo.description.substring(0, 500) + '...' : videoInfo.description)
-            : videoInfo.description;
-
-        const processedPrompt = promptContent
-            .replace(/\{\{title\}\}/g, videoInfo.title)
-            .replace(/\{\{channel\}\}/g, videoInfo.channelTitle)
-            .replace(/\{\{description\}\}/g, descSnippet)
-            .replace(/\{\{transcript\}\}/g, transcript);
-
-        // Create the complete API request that would be sent to OpenRouter
-        const apiRequest = {
-            model: model || 'openai/gpt-3.5-turbo', // Use selected model or default
-            messages: [
-                {
-                    role: 'system',
-                    content: 'You are a helpful assistant that creates comprehensive, well-structured summaries of YouTube video content. Always format your responses in clean markdown.'
-                },
-                {
-                    role: 'user',
-                    content: processedPrompt
-                }
-            ],
-            max_tokens: 10000,
-            temperature: 0.3
-        };
-
-        res.json({
-            success: true,
-            prompt: {
-                original: promptContent,
-                processed: processedPrompt,
-                apiRequest: apiRequest,
-                videoInfo: {
-                    title: videoInfo.title,
-                    channelTitle: videoInfo.channelTitle,
-                    description: descSnippet,
-                    videoId: videoInfo.videoId,
-                    publishedAt: videoInfo.publishedAt,
-                    viewCount: videoInfo.viewCount,
-                    likeCount: videoInfo.likeCount
-                },
-                transcriptLength: transcript.length,
-                promptId: promptId || 'default'
-            }
-        });
-
+        const favorites = await fileSystem.getFavoriteFolders();
+        res.json({ success: true, favorites });
     } catch (error) {
-        console.error('Error getting prompt:', error);
-        res.status(500).json({ error: error.message });
+        console.error('Error getting favorite folders:', error);
+        res.status(500).json({ error: 'Failed to get favorite folders' });
     }
 });
 
-// Serve static files (must be after API routes)
-app.use(express.static('public'));
+// Add favorite folder
+app.post('/api/folders/favorites', async (req, res) => {
+    try {
+        const { folderPath } = req.body;
+        if (!folderPath) {
+            return res.status(400).json({ error: 'Folder path is required' });
+        }
+        try {
+            const favorites = await fileSystem.addFavoriteFolder(folderPath);
+            res.json({ success: true, favorites, message: 'Folder added to favorites' });
+        } catch (error) {
+            console.error('[AddFavoriteFolder] Path:', folderPath, '| Error:', error.message);
+            res.status(400).json({ error: error.message });
+        }
+    } catch (error) {
+        console.error('[AddFavoriteFolder] Unexpected error:', error);
+        res.status(500).json({ error: 'Unexpected server error' });
+    }
+});
+
+// Remove favorite folder
+app.delete('/api/folders/favorites', async (req, res) => {
+    try {
+        const { folderPath } = req.body;
+        
+        if (!folderPath) {
+            return res.status(400).json({ error: 'Folder path is required' });
+        }
+        
+        const favorites = await fileSystem.removeFavoriteFolder(folderPath);
+        res.json({ success: true, favorites, message: 'Folder removed from favorites' });
+    } catch (error) {
+        console.error('Error removing favorite folder:', error);
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// Browse available directories
+app.get('/api/folders/browse', async (req, res) => {
+    try {
+        const commonDirs = fileSystem.getCommonDirectories();
+        const favorites = await fileSystem.getFavoriteFolders();
+        
+        // Check which favorites are still accessible
+        const accessibleFavorites = [];
+        for (const favorite of favorites) {
+            const isAccessible = await fileSystem.isPathAccessible(favorite);
+            if (isAccessible) {
+                accessibleFavorites.push(favorite);
+            }
+        }
+        
+        res.json({
+            success: true,
+            commonDirectories: commonDirs,
+            favoriteFolders: accessibleFavorites
+        });
+    } catch (error) {
+        console.error('Error browsing directories:', error);
+        res.status(500).json({ error: 'Failed to browse directories' });
+    }
+});
+
+// Save markdown to folder
+app.post('/api/download/save', async (req, res) => {
+    try {
+        const { content, filename, folderPath, overwrite } = req.body;
+        
+        if (!content || !filename || !folderPath) {
+            return res.status(400).json({ 
+                error: 'Missing required fields: content, filename, or folderPath' 
+            });
+        }
+        
+        const result = await fileSystem.saveMarkdownToFolder(content, filename, folderPath, !!overwrite);
+        if (result.needsConfirmation) {
+            return res.status(409).json({
+                success: false,
+                fileExists: true,
+                message: result.message,
+                filePath: result.filePath,
+                filename: result.filename,
+                needsConfirmation: true
+            });
+        }
+        res.json({
+            success: true,
+            message: result.message,
+            filePath: result.filePath,
+            filename: result.filename
+        });
+    } catch (error) {
+        console.error('Error saving markdown:', error);
+        res.status(400).json({ error: error.message });
+    }
+});
 
 if (require.main === module) {
     app.listen(PORT, () => {
@@ -2044,9 +1331,12 @@ if (require.main === module) {
 
 module.exports = {
     extractVideoId,
-    // Export parsing utilities for testing
+    sanitizeFilename,
     parseVttToText,
     parseSrtToText,
-    // Export transcript getter for smoke tests
-    getVideoTranscript
+    getVideoTranscript,
+    // export these for completeness in case tests import them later
+    analyzeContent,
+    generateTitle,
+    generateMarkdown
 };
