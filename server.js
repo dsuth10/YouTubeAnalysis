@@ -16,7 +16,7 @@ require('dotenv').config();
 let cachedPrompts = null;
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8000;
 
 // Initialize Notion client
 const notion = new Client({

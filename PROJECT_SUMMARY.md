@@ -151,7 +151,7 @@ Brief description...
 1. **Install dependencies**: `npm install`
 2. **Configure API keys**: Copy `env.example` to `.env` and add your keys
 3. **Start the app**: `npm start`
-4. **Open browser**: Navigate to `http://localhost:3000`
+4. **Open browser**: Navigate to `http://localhost:8000`
 5. **Analyze videos**: Paste YouTube URLs and generate reports!
 
 ## 🎨 UI/UX Features

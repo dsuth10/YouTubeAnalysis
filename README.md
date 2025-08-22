@@ -71,7 +71,7 @@ For each YouTube video, the app generates a comprehensive markdown report contai
    OPENROUTER_API_KEY=your_openrouter_api_key_here
    NOTION_TOKEN=your_notion_integration_token_here
    NOTION_DATABASE_ID=your_notion_database_id_here
-   PORT=3000
+   PORT=8000
    ```
 
 4. **Start the application**
@@ -80,7 +80,7 @@ For each YouTube video, the app generates a comprehensive markdown report contai
    ```
 
 5. **Open your browser**
-   Navigate to `http://localhost:3000`
+   Navigate to `http://localhost:8000`
 
 ## 🔑 Getting API Keys
 
@@ -271,7 +271,7 @@ youtube-analysis-app/
 | `OPENROUTER_API_KEY` | OpenRouter API key | Yes |
 | `NOTION_TOKEN` | Notion integration token | No |
 | `NOTION_DATABASE_ID` | Notion database ID | No |
-| `PORT` | Server port (default: 3000) | No |
+| `PORT` | Server port (default: 8000) | No |
 
 ### Customization
 
