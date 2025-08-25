@@ -1,3 +1,19 @@
+:root {
+    --primary-color: #667eea;
+    --primary-hover: #5a6fd8;
+    --secondary-color: #764ba2;
+    --accent-color: #f093fb;
+    --success-color: #28a745;
+    --warning-color: #ffc107;
+    --error-color: #dc3545;
+    --disabled-color: #6c757d;
+    --text-color: #333;
+    --text-light: #666;
+    --background-color: #f8f9fa;
+    --border-color: #e1e5e9;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+}
+
 /* Reset and base styles */
 * {
     margin: 0;
@@ -543,48 +559,69 @@ body {
     position: fixed;
     top: 20px;
     right: 20px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    padding: 15px 20px;
-    z-index: 1000;
-    transform: translateX(100%);
-    transition: transform 0.3s ease;
-    max-width: 300px;
-}
-
-.notification.show {
-    transform: translateX(0);
+    z-index: 10000;
+    max-width: 400px;
+    animation: slideInRight 0.3s ease-out;
 }
 
 .notification-content {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
+    padding: 16px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    font-weight: 500;
 }
 
 .notification-success {
+    background-color: #d4edda;
+    color: #155724;
     border-left: 4px solid #28a745;
 }
 
-.notification-success i {
-    color: #28a745;
-}
-
-.notification-info {
-    border-left: 4px solid #17a2b8;
-}
-
-.notification-info i {
-    color: #17a2b8;
-}
-
 .notification-error {
+    background-color: #f8d7da;
+    color: #721c24;
     border-left: 4px solid #dc3545;
 }
 
-.notification-error i {
-    color: #dc3545;
+.notification-warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border-left: 4px solid #ffc107;
+}
+
+.notification-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border-left: 4px solid #17a2b8;
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 4px;
+    margin-left: auto;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.notification-close:hover {
+    opacity: 1;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
 /* Prompt Select Styles */
@@ -1324,228 +1361,182 @@ body {
 }
 
 /* Download Modal Styles */
-.download-modal {
-    max-width: 700px;
-    width: 90%;
+.download-modal .modal-content {
+    max-width: 600px;
 }
 
-.folder-selection {
+.folder-input-group {
     display: flex;
     gap: 10px;
     align-items: center;
 }
 
-.folder-selection input {
+.folder-input-group input {
     flex: 1;
 }
 
-.browse-btn {
-    background: #667eea;
+.browse-folder-btn {
+    background: var(--primary-color);
     color: white;
     border: none;
-    padding: 15px 20px;
-    border-radius: 12px;
+    padding: 10px 15px;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 0.9rem;
-    transition: all 0.3s ease;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    white-space: nowrap;
     display: flex;
     align-items: center;
     gap: 8px;
-    white-space: nowrap;
 }
 
-.browse-btn:hover {
-    background: #5a6fd8;
-    transform: translateY(-1px);
+.browse-folder-btn:hover {
+    background: var(--primary-hover);
 }
 
-.browse-btn:disabled {
-    background: #ccc;
+.browse-folder-btn:disabled {
+    background: var(--disabled-color);
     cursor: not-allowed;
-    transform: none;
 }
 
+.browse-folder-btn i {
+    font-size: 16px;
+}
+
+.folder-selected {
+    background-color: #f0f8ff;
+    border-color: var(--primary-color);
+}
+
+.status-indicator {
+    margin-left: 10px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-indicator.supported {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-indicator.not-supported {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* Favorites section */
 .favorites-section {
     border: 1px solid #e1e5e9;
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 15px;
-    background: #f8f9fa;
+    margin-top: 10px;
 }
 
 .favorites-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 15px;
-    max-height: 150px;
+    max-height: 200px;
     overflow-y: auto;
+    margin-bottom: 15px;
 }
 
-.favorite-folder-item {
+.favorite-folder {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 10px 12px;
-    background: white;
+    gap: 10px;
+    padding: 10px;
     border: 1px solid #e1e5e9;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s ease;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    background: #f8f9fa;
 }
 
-.favorite-folder-item:hover {
-    border-color: #667eea;
-    background: #f0f4ff;
+.folder-name {
+    font-weight: 600;
+    color: var(--primary-color);
+    min-width: 80px;
 }
 
-.favorite-folder-item.selected {
-    border-color: #667eea;
-    background: #667eea;
-    color: white;
-}
-
-.favorite-folder-item .folder-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.folder-path {
     flex: 1;
-    min-width: 0;
-}
-
-.favorite-folder-item .folder-name {
-    font-weight: 500;
+    font-family: monospace;
+    font-size: 12px;
+    color: #666;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.favorite-folder-item .folder-path {
-    font-size: 0.8rem;
-    opacity: 0.7;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.favorite-folder-item .remove-favorite {
+.use-folder-btn, .remove-favorite-btn {
     background: none;
     border: none;
-    color: #dc3545;
-    cursor: pointer;
-    padding: 4px 8px;
+    padding: 6px;
     border-radius: 4px;
-    transition: all 0.3s ease;
-    opacity: 0.7;
-}
-
-.favorite-folder-item:hover .remove-favorite {
-    opacity: 1;
-}
-
-.favorite-folder-item .remove-favorite:hover {
-    background: #dc3545;
-    color: white;
-}
-
-.favorites-actions {
-    display: flex;
-    justify-content: flex-end;
-}
-
-.add-favorite-btn {
-    background: #28a745;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
     cursor: pointer;
-    font-size: 0.85rem;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    transition: background-color 0.2s;
 }
 
-.add-favorite-btn:hover:not(:disabled) {
-    background: #218838;
-    transform: translateY(-1px);
+.use-folder-btn {
+    color: var(--primary-color);
 }
 
-.add-favorite-btn:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-    transform: none;
+.use-folder-btn:hover {
+    background-color: rgba(102, 126, 234, 0.1);
 }
 
+.remove-favorite-btn {
+    color: #dc3545;
+}
+
+.remove-favorite-btn:hover {
+    background-color: rgba(220, 53, 69, 0.1);
+}
+
+.no-favorites {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 20px;
+}
+
+/* Common directories */
 .common-directories {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 10px;
     margin-top: 10px;
 }
 
-.common-directory-item {
+.common-directory-btn {
     display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 8px;
-    padding: 10px 12px;
-    background: white;
+    padding: 15px 10px;
     border: 1px solid #e1e5e9;
     border-radius: 8px;
+    background: white;
     cursor: pointer;
-    transition: all 0.3s ease;
-    font-size: 0.9rem;
-    flex: 1;
-    min-width: 0;
-}
-
-.common-directory-item:hover {
-    border-color: #667eea;
-    background: #f0f4ff;
-}
-
-.common-directory-item.selected {
-    border-color: #667eea;
-    background: #667eea;
-    color: white;
-}
-
-.common-directory-item i {
-    color: #667eea;
-    width: 16px;
-    flex-shrink: 0;
-}
-
-.common-directory-item.selected i {
-    color: white;
-}
-
-.common-directory-item .folder-name {
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.common-directory-item .folder-path {
-    font-size: 0.8rem;
-    opacity: 0.7;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.empty-favorites {
+    transition: all 0.2s;
     text-align: center;
-    padding: 20px;
-    color: #666;
-    font-style: italic;
 }
 
-.empty-favorites i {
-    font-size: 2rem;
-    margin-bottom: 10px;
-    opacity: 0.5;
+.common-directory-btn:hover {
+    border-color: var(--primary-color);
+    background-color: #f8f9fa;
+    transform: translateY(-1px);
+}
+
+.common-directory-btn i {
+    font-size: 24px;
+    color: var(--primary-color);
+}
+
+.common-directory-btn span {
+    font-size: 12px;
+    font-weight: 500;
+    color: #333;
 }
 
 /* Responsive design */

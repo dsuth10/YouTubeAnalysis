@@ -345,15 +345,20 @@
                 </button>
             </div>
             <div class="modal-body">
-                <div class="form-group">
+                <div class="form-group" id="youtubeApiKeyGroup">
                     <label for="youtubeApiKey">YouTube API Key</label>
                     <input type="password" id="youtubeApiKey" placeholder="Enter your YouTube API key">
                     <small>Get your API key from <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></small>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="openrouterApiKeyGroup">
                     <label for="openrouterApiKey">OpenRouter API Key</label>
                     <input type="password" id="openrouterApiKey" placeholder="Enter your OpenRouter API key">
                     <small>Get your API key from <a href="https://openrouter.ai/" target="_blank">OpenRouter</a></small>
+                </div>
+                <div class="form-group" id="apiKeysConfiguredInfo" style="display: none;">
+                    <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 15px; color: #155724;">
+                        <i class="fas fa-check-circle"></i> <strong>API Keys Configured:</strong> Your YouTube and OpenRouter API keys are configured in the environment file (.env). No additional configuration needed.
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="notionToken">Notion Integration Token</label>
@@ -447,8 +452,16 @@
                 <!-- Save to Folder section -->
                 <div class="form-group">
                     <label for="downloadFolderPath">Save to Folder</label>
-                    <input type="text" id="downloadFolderPath" placeholder="Type or paste folder path (e.g., C:/Users/YourName/Documents)" aria-label="Folder path">
-                    <small class="form-help">Type or paste the full path to the folder where you want to save your markdown file. Use Quick Access or Favorites for convenience.</small>
+                    <div class="folder-input-group">
+                        <input type="text" id="downloadFolderPath" placeholder="Type or paste folder path (e.g., C:/Users/YourName/Documents)" aria-label="Folder path">
+                        <button type="button" id="browseFolderBtn" class="browse-folder-btn" title="Browse for folder">
+                            <i class="fas fa-folder-open"></i> Browse
+                        </button>
+                    </div>
+                    <small class="form-help">
+                        <span id="folderHelpText">Click "Browse" to select a folder, or type/paste the full path manually.</span>
+                        <span id="fileSystemAccessStatus" class="status-indicator"></span>
+                    </small>
                 </div>
 
                 <!-- Favorites Section -->

@@ -60,6 +60,247 @@ const favoriteFoldersList = document.getElementById('favoriteFoldersList');
 const addCurrentToFavoritesBtn = document.getElementById('addCurrentToFavoritesBtn');
 const commonDirectoriesList = document.getElementById('commonDirectoriesList');
 const saveMarkdownBtn = document.getElementById('saveMarkdownBtn');
+const folderHelpText = document.getElementById('folderHelpText');
+const fileSystemAccessStatus = document.getElementById('fileSystemAccessStatus');
+
+// File System Access API support check
+let isFileSystemAccessSupported = false;
+let currentDirectoryHandle = null;
+
+// Check File System Access API support
+function checkFileSystemAccessSupport() {
+    isFileSystemAccessSupported = 'showDirectoryPicker' in window;
+    console.log('File System Access API supported:', isFileSystemAccessSupported);
+}
+
+// Browse for folder using File System Access API
+async function browseForFolder() {
+    try {
+        if (!isFileSystemAccessSupported) {
+            showNotification('Folder browsing is not supported in your browser. Please type the folder path manually.', 'warning');
+            return;
+        }
+
+        const directoryHandle = await window.showDirectoryPicker({
+            mode: 'readwrite',
+            startIn: 'downloads'
+        });
+
+        if (directoryHandle) {
+            currentDirectoryHandle = directoryHandle;
+            const folderPath = directoryHandle.name;
+            downloadFolderPath.value = folderPath;
+            
+            // Enable the add to favorites button
+            addCurrentToFavoritesBtn.disabled = false;
+            
+            // Update the folder path display
+            updateFolderPathDisplay(folderPath);
+            
+            showNotification(`Selected folder: ${folderPath}`, 'success');
+        }
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            // User cancelled the folder picker
+            console.log('Folder selection cancelled by user');
+        } else {
+            console.error('Error browsing for folder:', error);
+            showNotification('Error selecting folder. Please try again or type the path manually.', 'error');
+        }
+    }
+}
+
+// Update folder path display with better formatting
+function updateFolderPathDisplay(path) {
+    if (path) {
+        downloadFolderPath.value = path;
+        downloadFolderPath.classList.add('folder-selected');
+    } else {
+        downloadFolderPath.classList.remove('folder-selected');
+    }
+}
+
+// Save file using File System Access API if available
+async function saveFileWithFileSystemAccess(content, filename, mimeType = 'text/markdown') {
+    try {
+        if (currentDirectoryHandle && isFileSystemAccessSupported) {
+            // Create a new file in the selected directory
+            const fileHandle = await currentDirectoryHandle.getFileHandle(filename, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(content);
+            await writable.close();
+            
+            showNotification(`File saved successfully to: ${currentDirectoryHandle.name}/${filename}`, 'success');
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Error saving file with File System Access API:', error);
+        showNotification('Error saving file. Falling back to download method.', 'warning');
+        return false;
+    }
+}
+
+// Enhanced download function with folder support
+async function downloadMarkdown(content, filename) {
+    try {
+        // First try to save using File System Access API
+        if (await saveFileWithFileSystemAccess(content, filename)) {
+            return; // File was saved successfully
+        }
+
+        // Fallback to traditional download method
+        const blob = new Blob([content], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showNotification('File downloaded successfully!', 'success');
+    } catch (error) {
+        console.error('Error downloading file:', error);
+        showNotification('Error downloading file. Please try again.', 'error');
+    }
+}
+
+// Notification system
+function showNotification(message, type = 'info') {
+    // Remove existing notifications
+    const existingNotifications = document.querySelectorAll('.notification');
+    existingNotifications.forEach(notification => notification.remove());
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.innerHTML = `
+        <div class="notification-content">
+            <i class="fas fa-${getNotificationIcon(type)}"></i>
+            <span>${message}</span>
+            <button class="notification-close" onclick="this.parentElement.parentElement.remove()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+// Get notification icon based on type
+function getNotificationIcon(type) {
+    switch (type) {
+        case 'success': return 'check-circle';
+        case 'error': return 'exclamation-triangle';
+        case 'warning': return 'exclamation-circle';
+        default: return 'info-circle';
+    }
+}
+
+// Update save button state based on form inputs
+function updateSaveButtonState() {
+    const filename = downloadFilename.value.trim();
+    const folderPath = downloadFolderPath.value.trim();
+    const hasValidInputs = filename && (folderPath || currentDirectoryHandle);
+    
+    saveMarkdownBtn.disabled = !hasValidInputs;
+}
+
+// Check if folder is already in favorites
+function isFolderInFavorites(folderPath) {
+    const favorites = JSON.parse(localStorage.getItem('favoriteFolders') || '[]');
+    return favorites.some(fav => fav.path === folderPath);
+}
+
+// Add folder to favorites
+function addFolderToFavorites(folderPath) {
+    const favorites = JSON.parse(localStorage.getItem('favoriteFolders') || '[]');
+    const folderName = folderPath.split(/[\\/]/).pop() || folderPath;
+    
+    if (!isFolderInFavorites(folderPath)) {
+        favorites.push({
+            name: folderName,
+            path: folderPath,
+            added: new Date().toISOString()
+        });
+        localStorage.setItem('favoriteFolders', JSON.stringify(favorites));
+        loadFavoriteFolders(); // Refresh the display
+    }
+}
+
+// Load favorite folders
+function loadFavoriteFolders() {
+    const favorites = JSON.parse(localStorage.getItem('favoriteFolders') || '[]');
+    const container = document.getElementById('favoriteFoldersList');
+    
+    if (favorites.length === 0) {
+        container.innerHTML = '<p class="no-favorites">No favorite folders yet. Add some to get started!</p>';
+        return;
+    }
+    
+    container.innerHTML = favorites.map(fav => `
+        <div class="favorite-folder" data-path="${fav.path}">
+            <span class="folder-name">${fav.name}</span>
+            <span class="folder-path">${fav.path}</span>
+            <button class="use-folder-btn" onclick="useFavoriteFolder('${fav.path}')" title="Use this folder">
+                <i class="fas fa-folder-open"></i>
+            </button>
+            <button class="remove-favorite-btn" onclick="removeFavoriteFolder('${fav.path}')" title="Remove from favorites">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+// Use a favorite folder
+function useFavoriteFolder(folderPath) {
+    downloadFolderPath.value = folderPath;
+    updateFolderPathDisplay(folderPath);
+    addCurrentToFavoritesBtn.disabled = false;
+}
+
+// Remove folder from favorites
+function removeFavoriteFolder(folderPath) {
+    const favorites = JSON.parse(localStorage.getItem('favoriteFolders') || '[]');
+    const updatedFavorites = favorites.filter(fav => fav.path !== folderPath);
+    localStorage.setItem('favoriteFolders', JSON.stringify(updatedFavorites));
+    loadFavoriteFolders();
+}
+
+// Load common directories
+function loadCommonDirectories() {
+    const commonDirs = [
+        { name: 'Desktop', path: '~/Desktop' },
+        { name: 'Documents', path: '~/Documents' },
+        { name: 'Downloads', path: '~/Downloads' },
+        { name: 'Pictures', path: '~/Pictures' }
+    ];
+    
+    const container = document.getElementById('commonDirectoriesList');
+    container.innerHTML = commonDirs.map(dir => `
+        <button class="common-directory-btn" onclick="useCommonDirectory('${dir.path}')" title="${dir.path}">
+            <i class="fas fa-folder"></i>
+            <span>${dir.name}</span>
+        </button>
+    `).join('');
+}
+
+// Use a common directory
+function useCommonDirectory(dirPath) {
+    // For now, just show a message about manual entry
+    showNotification(`Please manually enter the full path to ${dirPath}`, 'info');
+    downloadFolderPath.focus();
+}
 
 // API Keys
 const youtubeApiKeyInput = document.getElementById('youtubeApiKey');
@@ -80,6 +321,7 @@ let favoriteModels = []; // Store favorite model IDs
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', function() {
+    clearApiWarnings(); // Clear any existing API warnings on page load
     loadSettings();
     loadFavorites(); // Load favorites before models
     loadModels();
@@ -87,6 +329,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
     checkHealth();
     initializeNotion();
+    checkFileSystemAccessSupport(); // Check for File System Access API support
 });
 
 // Setup event listeners
@@ -104,7 +347,7 @@ function setupEventListeners() {
     favoritesFilterBtn.addEventListener('click', toggleFavoritesFilter);
     
     // Action buttons
-    downloadBtn.addEventListener('click', handleDownload);
+    downloadBtn.addEventListener('click', showDownloadModal);
     previewBtn.addEventListener('click', handlePreview);
     exportBtn.addEventListener('click', handleExportToNotion);
     newAnalysisBtn.addEventListener('click', handleNewAnalysis);
@@ -125,19 +368,60 @@ function setupEventListeners() {
     // Download modal controls
     closeDownloadBtn.addEventListener('click', hideDownloadModal);
     cancelDownloadBtn.addEventListener('click', hideDownloadModal);
-    // Remove browse folder and file input logic
-    // Only allow manual entry, quick access, and favorites for folder selection
-    // (No code needed for folderInput or handleFolderSelection)
-    downloadFolderPath.addEventListener('input', validateDownloadForm);
-    downloadFilename.addEventListener('input', validateDownloadForm);
-    addCurrentToFavoritesBtn.addEventListener('click', addCurrentFolderToFavorites);
-    saveMarkdownBtn.addEventListener('click', saveMarkdownToFolder);
+    // Browse folder button
+    browseFolderBtn.addEventListener('click', browseForFolder);
     
-    // Favorites management
-    clearFavoritesBtn.addEventListener('click', clearAllFavorites);
-    exportFavoritesBtn.addEventListener('click', exportFavorites);
-    importFavoritesBtn.addEventListener('click', () => importFavoritesInput.click());
-    importFavoritesInput.addEventListener('change', handleImportFavorites);
+    // Download modal form validation
+    downloadFilename.addEventListener('input', updateSaveButtonState);
+    downloadFolderPath.addEventListener('input', updateSaveButtonState);
+    
+    // Add current folder to favorites
+    addCurrentToFavoritesBtn.addEventListener('click', () => {
+        const folderPath = downloadFolderPath.value.trim();
+        if (folderPath) {
+            addFolderToFavorites(folderPath);
+            showNotification('Folder added to favorites!', 'success');
+        }
+    });
+    
+    // Save markdown button
+    saveMarkdownBtn.addEventListener('click', async () => {
+        const filename = downloadFilename.value.trim();
+        const folderPath = downloadFolderPath.value.trim();
+        
+        if (!filename) {
+            showNotification('Please enter a filename.', 'error');
+            return;
+        }
+        
+        if (!folderPath && !currentDirectoryHandle) {
+            showNotification('Please select a folder or enter a folder path.', 'error');
+            return;
+        }
+        
+        // Add .md extension if not present
+        const finalFilename = filename.endsWith('.md') ? filename : `${filename}.md`;
+        
+        try {
+            // Use the enhanced download function
+            await downloadMarkdown(currentResult.markdown, finalFilename);
+            
+            // Save to favorites if this is a new folder path
+            if (folderPath && !isFolderInFavorites(folderPath)) {
+                addFolderToFavorites(folderPath);
+            }
+            
+            // Store last used folder
+            localStorage.setItem('lastUsedFolder', folderPath);
+            
+            // Hide modal after successful save
+            hideDownloadModal();
+            
+        } catch (error) {
+            console.error('Error saving markdown:', error);
+            showNotification('Error saving file. Please try again.', 'error');
+        }
+    });
     
     // Close modals on outside click
     window.addEventListener('click', function(event) {
@@ -634,7 +918,8 @@ async function checkHealth() {
         const response = await fetch('/api/health');
         const data = await response.json();
         
-        if (!data.youtubeApi || !data.openrouterApi) {
+        // Check if any required API keys are missing from environment configuration
+        if (!data.apiKeysConfigured?.youtube || !data.apiKeysConfigured?.openrouter) {
             showApiWarning(data);
         }
     } catch (error) {
@@ -644,14 +929,21 @@ async function checkHealth() {
 
 // Show API warning
 function showApiWarning(healthData) {
-    const warnings = [];
+    // Clear any existing API warnings first
+    clearApiWarnings();
     
-    if (!healthData.youtubeApi) {
+    const warnings = [];
+    const missingKeys = [];
+    
+    // Check if API keys are configured in the environment (.env file)
+    if (!healthData.apiKeysConfigured?.youtube) {
         warnings.push('YouTube API key not configured');
+        missingKeys.push('youtube');
     }
     
-    if (!healthData.openrouterApi) {
+    if (!healthData.apiKeysConfigured?.openrouter) {
         warnings.push('OpenRouter API key not configured');
+        missingKeys.push('openrouter');
     }
     
     if (warnings.length > 0) {
@@ -672,6 +964,15 @@ function showApiWarning(healthData) {
             openSettings();
         });
     }
+    
+    // Store missing keys for use in settings modal
+    window.missingApiKeys = missingKeys;
+}
+
+// Clear existing API warnings
+function clearApiWarnings() {
+    const existingWarnings = document.querySelectorAll('.api-warning');
+    existingWarnings.forEach(warning => warning.remove());
 }
 
 // Settings functions
@@ -679,6 +980,7 @@ function openSettings() {
     settingsModal.classList.remove('hidden');
     loadSettings();
     updateFavoriteCount(); // Update favorites count in settings
+    updateApiKeyFields(); // Show/hide API key fields based on configuration
 }
 
 function closeSettings() {
@@ -686,11 +988,19 @@ function closeSettings() {
 }
 
 function saveSettings() {
+    const missingKeys = window.missingApiKeys || [];
     const settings = {
-        youtubeApiKey: youtubeApiKeyInput.value,
-        openrouterApiKey: openrouterApiKeyInput.value,
-        notionToken: notionTokenInput.value
+        notionToken: notionTokenInput.value // Always save Notion token as it's optional
     };
+    
+    // Only save API keys that are not configured in the environment
+    if (missingKeys.includes('youtube')) {
+        settings.youtubeApiKey = youtubeApiKeyInput.value;
+    }
+    
+    if (missingKeys.includes('openrouter')) {
+        settings.openrouterApiKey = openrouterApiKeyInput.value;
+    }
     
     localStorage.setItem('youtubeAnalysisSettings', JSON.stringify(settings));
     closeSettings();
@@ -705,9 +1015,72 @@ function saveSettings() {
 
 function loadSettings() {
     const settings = JSON.parse(localStorage.getItem('youtubeAnalysisSettings') || '{}');
-    youtubeApiKeyInput.value = settings.youtubeApiKey || '';
-    openrouterApiKeyInput.value = settings.openrouterApiKey || '';
+    const missingKeys = window.missingApiKeys || [];
+    
+    // Only load API keys that are not configured in the environment
+    if (missingKeys.includes('youtube')) {
+        youtubeApiKeyInput.value = settings.youtubeApiKey || '';
+    } else {
+        youtubeApiKeyInput.value = '';
+    }
+    
+    if (missingKeys.includes('openrouter')) {
+        openrouterApiKeyInput.value = settings.openrouterApiKey || '';
+    } else {
+        openrouterApiKeyInput.value = '';
+    }
+    
+    // Always load Notion token as it's optional
     notionTokenInput.value = settings.notionToken || '';
+}
+
+// Update API key input fields visibility based on environment configuration
+function updateApiKeyFields() {
+    const missingKeys = window.missingApiKeys || [];
+    
+    // Get the parent containers for each API key field
+    const youtubeContainer = document.getElementById('youtubeApiKeyGroup');
+    const openrouterContainer = document.getElementById('openrouterApiKeyGroup');
+    const notionContainer = notionTokenInput.closest('.form-group');
+    const apiKeysInfo = document.getElementById('apiKeysConfiguredInfo');
+    
+    // Show/hide YouTube API key field
+    if (missingKeys.includes('youtube')) {
+        youtubeContainer.style.display = 'block';
+        youtubeApiKeyInput.placeholder = 'Enter your YouTube API key';
+    } else {
+        youtubeContainer.style.display = 'none';
+        youtubeApiKeyInput.value = ''; // Clear the field when hidden
+    }
+    
+    // Show/hide OpenRouter API key field
+    if (missingKeys.includes('openrouter')) {
+        openrouterContainer.style.display = 'block';
+        openrouterApiKeyInput.placeholder = 'Enter your OpenRouter API key';
+    } else {
+        openrouterContainer.style.display = 'none';
+        openrouterApiKeyInput.value = ''; // Clear the field when hidden
+    }
+    
+    // Always show Notion token field (it's optional)
+    notionContainer.style.display = 'block';
+    
+    // Show/hide the "API Keys Configured" info message
+    if (missingKeys.length === 0) {
+        apiKeysInfo.style.display = 'block';
+    } else {
+        apiKeysInfo.style.display = 'none';
+    }
+    
+    // Update the settings modal title to reflect the configuration status
+    const settingsTitle = document.querySelector('#settingsModal .modal-header h3');
+    if (settingsTitle) {
+        if (missingKeys.length === 0) {
+            settingsTitle.innerHTML = '<i class="fas fa-cog"></i> Settings (API Keys Configured)';
+        } else {
+            settingsTitle.innerHTML = '<i class="fas fa-cog"></i> Settings (Configuration Required)';
+        }
+    }
 }
 
 // Help functions
@@ -1253,12 +1626,39 @@ function showNotification(message, type = 'info') {
 // Show download modal
 function showDownloadModal() {
     downloadModal.classList.remove('hidden');
-    // Prefill last used folder if available
-    const lastFolder = localStorage.getItem('lastUsedFolder');
-    if (lastFolder) {
-        downloadFolderPath.value = lastFolder;
+    
+    // Set default filename
+    const videoTitle = document.getElementById('videoTitle').textContent;
+    const sanitizedTitle = videoTitle.replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
+    downloadFilename.value = sanitizedTitle || 'youtube-analysis';
+    
+    // Update folder help text and status
+    updateFolderHelpText();
+    
+    // Load favorite folders and common directories
+    loadFavoriteFolders();
+    loadCommonDirectories();
+    
+    // Enable/disable save button based on input
+    updateSaveButtonState();
+}
+
+// Update folder help text based on browser support
+function updateFolderHelpText() {
+    const folderHelpText = document.getElementById('folderHelpText');
+    const fileSystemAccessStatus = document.getElementById('fileSystemAccessStatus');
+    
+    if (isFileSystemAccessSupported) {
+        folderHelpText.textContent = 'Click "Browse" to select a folder, or type/paste the full path manually.';
+        fileSystemAccessStatus.textContent = 'Folder browsing supported';
+        fileSystemAccessStatus.className = 'status-indicator supported';
+        browseFolderBtn.disabled = false;
+    } else {
+        folderHelpText.textContent = 'Folder browsing not supported in your browser. Please type or paste the full path manually.';
+        fileSystemAccessStatus.textContent = 'Folder browsing not supported';
+        fileSystemAccessStatus.className = 'status-indicator not-supported';
+        browseFolderBtn.disabled = true;
     }
-    downloadFilename.focus();
 }
 
 // Hide download modal

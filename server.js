@@ -500,11 +500,22 @@ app.post('/api/prompts/reload', async (req, res) => {
 app.get('/api/health', async (req, res) => {
     try {
         const prompts = await getPrompts();
+        
+        // Check if API keys are configured in environment
+        const youtubeApiConfigured = !!process.env.YOUTUBE_API_KEY;
+        const openrouterApiConfigured = !!process.env.OPENROUTER_API_KEY;
+        const notionApiConfigured = !!process.env.NOTION_TOKEN;
+        
         res.json({ 
             status: 'ok', 
-            youtubeApi: !!process.env.YOUTUBE_API_KEY,
-            openrouterApi: !!process.env.OPENROUTER_API_KEY,
-            notionApi: !!process.env.NOTION_TOKEN,
+            youtubeApi: youtubeApiConfigured,
+            openrouterApi: openrouterApiConfigured,
+            notionApi: notionApiConfigured,
+            apiKeysConfigured: {
+                youtube: youtubeApiConfigured,
+                openrouter: openrouterApiConfigured,
+                notion: notionApiConfigured
+            },
             prompts: prompts.length,
             timestamp: new Date().toISOString()
         });
