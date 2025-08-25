@@ -328,7 +328,51 @@ function closePreview() {
 function handleNewAnalysis() {
     hideAllSections();
     analysisForm.classList.remove('hidden');
+    
+    // Clear all form inputs
     youtubeUrlInput.value = '';
+    
+    // Clear manual transcript input
+    const manualTranscriptInput = document.getElementById('manualTranscriptInput');
+    if (manualTranscriptInput) {
+        manualTranscriptInput.value = '';
+    }
+    
+    // Reset prompt template selection
+    const promptTemplateSelect = document.getElementById('promptTemplateSelect');
+    if (promptTemplateSelect) {
+        promptTemplateSelect.value = '';
+    }
+    
+    // Clear edited prompt textarea
+    const editedPromptTextarea = document.getElementById('editedPromptTextarea');
+    if (editedPromptTextarea) {
+        editedPromptTextarea.value = '';
+    }
+    
+    // Uncheck "use edited prompt" checkbox
+    const useEditedPromptCheckbox = document.getElementById('useEditedPromptCheckbox');
+    if (useEditedPromptCheckbox) {
+        useEditedPromptCheckbox.checked = false;
+    }
+    
+    // Hide prompt editor container
+    const promptEditorContainer = document.getElementById('promptEditorContainer');
+    if (promptEditorContainer) {
+        promptEditorContainer.style.display = 'none';
+    }
+    
+    // Reset prompt status indicators
+    const promptStatusText = document.getElementById('promptStatusText');
+    if (promptStatusText) {
+        promptStatusText.textContent = 'Original template will be used';
+    }
+    
+    const promptLength = document.getElementById('promptLength');
+    if (promptLength) {
+        promptLength.textContent = '0 / 5000 characters';
+    }
+    
     currentResult = null;
 }
 
