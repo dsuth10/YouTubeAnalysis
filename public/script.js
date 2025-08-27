@@ -144,12 +144,7 @@ async function saveFileWithFileSystemAccess(content, filename, mimeType = 'text/
 // Enhanced download function with folder support
 async function downloadMarkdown(content, filename) {
     try {
-        // First try to save using File System Access API
-        if (await saveFileWithFileSystemAccess(content, filename)) {
-            return; // File was saved successfully
-        }
-
-        // Fallback to traditional download method
+        // Direct download to Downloads folder (browser default)
         const blob = new Blob([content], { type: 'text/markdown' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -160,7 +155,28 @@ async function downloadMarkdown(content, filename) {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        showNotification('File downloaded successfully!', 'success');
+        showNotification('File downloaded successfully to Downloads folder!', 'success');
+    } catch (error) {
+        console.error('Error downloading file:', error);
+        showNotification('Error downloading file. Please try again.', 'error');
+    }
+}
+
+// Download text files to Downloads folder
+async function downloadText(content, filename) {
+    try {
+        // Direct download to Downloads folder (browser default)
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showNotification('File downloaded successfully to Downloads folder!', 'success');
     } catch (error) {
         console.error('Error downloading file:', error);
         showNotification('Error downloading file. Please try again.', 'error');
@@ -347,9 +363,20 @@ function setupEventListeners() {
     favoritesFilterBtn.addEventListener('click', toggleFavoritesFilter);
     
     // Action buttons
-    downloadBtn.addEventListener('click', showDownloadModal);
+    downloadBtn.addEventListener('click', handleDownload);
     previewBtn.addEventListener('click', handlePreview);
     exportBtn.addEventListener('click', handleExportToNotion);
+    
+    // Additional download buttons
+    const downloadPromptBtn = document.getElementById('downloadPromptBtn');
+    const downloadTranscriptBtn = document.getElementById('downloadTranscriptBtn');
+    const downloadRawSubsBtn = document.getElementById('downloadRawSubsBtn');
+    const downloadDescriptionBtn = document.getElementById('downloadDescriptionBtn');
+    
+    if (downloadPromptBtn) downloadPromptBtn.addEventListener('click', handlePromptDownload);
+    if (downloadTranscriptBtn) downloadTranscriptBtn.addEventListener('click', handleTranscriptDownload);
+    if (downloadRawSubsBtn) downloadRawSubsBtn.addEventListener('click', handleTranscriptDownload); // Same as transcript
+    if (downloadDescriptionBtn) downloadDescriptionBtn.addEventListener('click', handleDescriptionDownload);
     newAnalysisBtn.addEventListener('click', handleNewAnalysis);
     retryBtn.addEventListener('click', handleRetry);
     
@@ -384,44 +411,8 @@ function setupEventListeners() {
         }
     });
     
-    // Save markdown button
-    saveMarkdownBtn.addEventListener('click', async () => {
-        const filename = downloadFilename.value.trim();
-        const folderPath = downloadFolderPath.value.trim();
-        
-        if (!filename) {
-            showNotification('Please enter a filename.', 'error');
-            return;
-        }
-        
-        if (!folderPath && !currentDirectoryHandle) {
-            showNotification('Please select a folder or enter a folder path.', 'error');
-            return;
-        }
-        
-        // Add .md extension if not present
-        const finalFilename = filename.endsWith('.md') ? filename : `${filename}.md`;
-        
-        try {
-            // Use the enhanced download function
-            await downloadMarkdown(currentResult.markdown, finalFilename);
-            
-            // Save to favorites if this is a new folder path
-            if (folderPath && !isFolderInFavorites(folderPath)) {
-                addFolderToFavorites(folderPath);
-            }
-            
-            // Store last used folder
-            localStorage.setItem('lastUsedFolder', folderPath);
-            
-            // Hide modal after successful save
-            hideDownloadModal();
-            
-        } catch (error) {
-            console.error('Error saving markdown:', error);
-            showNotification('Error saving file. Please try again.', 'error');
-        }
-    });
+    // Save markdown button - now uses direct download
+    saveMarkdownBtn.addEventListener('click', handleDownload);
     
     // Close modals on outside click
     window.addEventListener('click', function(event) {
@@ -577,22 +568,65 @@ function hideAllSections() {
     previewSection.classList.add('hidden');
 }
 
-// Handle download - show modal instead of direct download
+// Handle download - direct download to Downloads folder
 function handleDownload() {
     if (!currentResult) return;
     
-    // Set default filename
-    downloadFilename.value = currentResult.filename.replace('.md', '');
+    // Generate filename with timestamp to avoid conflicts
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const baseFilename = currentResult.filename.replace('.md', '');
+    const filename = `${baseFilename}_${timestamp}.md`;
     
-    // Clear previous selections
-    downloadFolderPath.value = '';
-    clearFolderSelections();
+    // Direct download to Downloads folder
+    downloadMarkdown(currentResult.markdown, filename);
+}
+
+// Handle transcript download - direct download to Downloads folder
+function handleTranscriptDownload() {
+    if (!currentResult || !currentResult.transcript) {
+        showNotification('No transcript available for download.', 'error');
+        return;
+    }
     
-    // Load favorites and common directories
-    loadDownloadModalData();
+    // Generate filename with timestamp to avoid conflicts
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const baseFilename = currentResult.filename.replace('.md', '');
+    const filename = `${baseFilename}_transcript_${timestamp}.txt`;
     
-    // Show modal
-    showDownloadModal();
+    // Direct download to Downloads folder
+    downloadText(currentResult.transcript, filename);
+}
+
+// Handle description download - direct download to Downloads folder
+function handleDescriptionDownload() {
+    if (!currentResult || !currentResult.videoInfo || !currentResult.videoInfo.description) {
+        showNotification('No description available for download.', 'error');
+        return;
+    }
+    
+    // Generate filename with timestamp to avoid conflicts
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const baseFilename = currentResult.filename.replace('.md', '');
+    const filename = `${baseFilename}_description_${timestamp}.txt`;
+    
+    // Direct download to Downloads folder
+    downloadText(currentResult.videoInfo.description, filename);
+}
+
+// Handle prompt download - direct download to Downloads folder
+function handlePromptDownload() {
+    if (!currentResult || !currentResult.markdown) {
+        showNotification('No prompt content available for download.', 'error');
+        return;
+    }
+    
+    // Generate filename with timestamp to avoid conflicts
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const baseFilename = currentResult.filename.replace('.md', '');
+    const filename = `${baseFilename}_prompt_${timestamp}.md`;
+    
+    // Direct download to Downloads folder
+    downloadMarkdown(currentResult.markdown, filename);
 }
 
 // Handle preview

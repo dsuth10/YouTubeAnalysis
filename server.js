@@ -459,7 +459,8 @@ app.post('/api/process', async (req, res) => {
             filename: filename,
             filePath: filePath,
             markdown: markdown,
-            videoInfo: videoInfo
+            videoInfo: videoInfo,
+            transcript: transcript.text
         });
 
     } catch (error) {
