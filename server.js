@@ -1,7 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-const { YoutubeTranscript } = require('youtube-transcript');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
+
 const { Client } = require('@notionhq/client');
 const fs = require('fs').promises;
 const path = require('path');
@@ -32,7 +35,7 @@ function extractVideoId(url) {
         /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
         /youtube\.com\/shorts\/([^&\n?#]+)/
     ];
-    
+
     for (const pattern of patterns) {
         const match = url.match(pattern);
         if (match) return match[1];
@@ -89,24 +92,24 @@ async function loadPrompts() {
     try {
         const promptsDir = path.join(__dirname, 'prompts');
         const files = await fs.readdir(promptsDir);
-        
+
         const prompts = [];
-        
+
         for (const file of files) {
             if (file.endsWith('.md')) {
                 try {
                     const filePath = path.join(promptsDir, file);
                     const content = await fs.readFile(filePath, 'utf8');
-                    
+
                     // Skip empty files
                     if (!content.trim()) {
                         continue;
                     }
-                    
+
                     // Extract prompt name from first heading or filename
                     const firstLine = content.split('\n')[0];
                     let name = file.replace('.md', '');
-                    
+
                     // If first line is a heading, use it as name
                     if (firstLine.startsWith('#')) {
                         name = firstLine.replace(/^#+\s*/, '').trim();
@@ -114,9 +117,9 @@ async function loadPrompts() {
                         // Convert filename to display name
                         name = name.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                     }
-                    
+
                     const id = file.replace('.md', '');
-                    
+
                     prompts.push({
                         id: id,
                         name: name,
@@ -127,7 +130,7 @@ async function loadPrompts() {
                 }
             }
         }
-        
+
         // Add default prompt if no prompts found
         if (prompts.length === 0) {
             prompts.push({
@@ -161,7 +164,7 @@ Please analyze this video and provide a comprehensive summary in the following f
 Format your response in clean markdown with proper headings and bullet points. Focus on extracting the most valuable and actionable information from the video.`
             });
         }
-        
+
         return prompts;
     } catch (error) {
         console.error('Error loading prompts:', error);
@@ -220,15 +223,36 @@ async function getVideoMetadata(videoId) {
     }
 }
 
-// Get video transcript
+// Get video transcript using Python youtube-transcript-api
 async function getVideoTranscript(videoId) {
     try {
-        const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
-        const text = transcriptItems.map(item => item.text).join(' ');
-        return { text, source: 'captions' };
+        const scriptPath = path.join(__dirname, 'scripts', 'get_transcript.py');
+        console.log(`Fetching transcript for ${videoId} using ${scriptPath}`);
+
+        const { stdout, stderr } = await execAsync(`python "${scriptPath}" ${videoId}`);
+
+        if (stderr && !stdout) {
+            console.error('Python script stderr:', stderr);
+            throw new Error(stderr);
+        }
+
+        const transcriptData = JSON.parse(stdout);
+
+        if (transcriptData.error) {
+            throw new Error(transcriptData.error);
+        }
+
+        // The Python script returns a list of segments: [{text: "...", start: ..., duration: ...}, ...]
+        const text = transcriptData.map(item => item.text).join(' ');
+
+        return {
+            text,
+            source: 'youtube-transcript-api',
+            raw: transcriptData
+        };
     } catch (error) {
-        console.error('Error fetching transcript:', error.message);
-        throw new Error('Could not fetch transcript. The video may not have captions enabled.');
+        console.error('Error fetching transcript with Python:', error.message);
+        throw new Error(`Could not fetch transcript: ${error.message}`);
     }
 }
 
@@ -241,16 +265,16 @@ async function analyzeContent(transcript, videoInfo, model, promptId = null) {
         }
 
         let promptContent;
-        
+
         if (promptId) {
             // Load custom prompt
             const prompts = await getPrompts();
             const selectedPrompt = prompts.find(p => p.id === promptId);
-            
+
             if (!selectedPrompt) {
                 throw new Error(`Prompt with ID '${promptId}' not found`);
             }
-            
+
             promptContent = selectedPrompt.content;
         } else {
             // Use default prompt
@@ -409,7 +433,7 @@ ${analysis}
 app.post('/api/process', async (req, res) => {
     try {
         const { url, model, promptId } = req.body;
-        
+
         if (!url) {
             return res.status(400).json({ error: 'YouTube URL is required' });
         }
@@ -426,6 +450,8 @@ app.post('/api/process', async (req, res) => {
 
         // Get transcript
         const transcript = await getVideoTranscript(videoId);
+        videoInfo.transcript = transcript.text;
+        videoInfo.source = transcript.source;
 
         // Analyze content with selected prompt
         const analysis = await analyzeContent(transcript, videoInfo, model || 'openai/gpt-3.5-turbo', promptId);
@@ -460,13 +486,14 @@ app.post('/api/process', async (req, res) => {
             filePath: filePath,
             markdown: markdown,
             videoInfo: videoInfo,
-            transcript: transcript.text
+            transcript: transcript.text,
+            source: transcript.source
         });
 
     } catch (error) {
         console.error('Error processing video:', error);
-        res.status(500).json({ 
-            error: error.message || 'An error occurred while processing the video' 
+        res.status(500).json({
+            error: error.message || 'An error occurred while processing the video'
         });
     }
 });
@@ -486,8 +513,8 @@ app.get('/api/prompts', async (req, res) => {
 app.post('/api/prompts/reload', async (req, res) => {
     try {
         const prompts = await reloadPrompts();
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Prompts reloaded successfully',
             prompts: prompts.map(p => ({ id: p.id, name: p.name }))
         });
@@ -501,14 +528,14 @@ app.post('/api/prompts/reload', async (req, res) => {
 app.get('/api/health', async (req, res) => {
     try {
         const prompts = await getPrompts();
-        
+
         // Check if API keys are configured in environment
         const youtubeApiConfigured = !!process.env.YOUTUBE_API_KEY;
         const openrouterApiConfigured = !!process.env.OPENROUTER_API_KEY;
         const notionApiConfigured = !!process.env.NOTION_TOKEN;
-        
-        res.json({ 
-            status: 'ok', 
+
+        res.json({
+            status: 'ok',
             youtubeApi: youtubeApiConfigured,
             openrouterApi: openrouterApiConfigured,
             notionApi: notionApiConfigured,
@@ -586,7 +613,7 @@ app.get('/api/download/:filename', async (req, res) => {
     try {
         const filename = req.params.filename;
         const filePath = path.join(__dirname, 'output', filename);
-        
+
         res.download(filePath, filename, (err) => {
             if (err) {
                 res.status(404).json({ error: 'File not found' });
@@ -693,7 +720,7 @@ app.post('/api/notion/saveNote', async (req, res) => {
 
         // Step 2: Create child page with detailed content
         const childPageBlocks = createChildPageBlocks(videoInfo, markdown);
-        
+
         // Notion has a limit of 100 blocks per request, so we need to split if needed
         const maxBlocksPerRequest = 100;
         const childPage = await notion.pages.create({
@@ -754,7 +781,7 @@ app.post('/api/notion/saveNote', async (req, res) => {
             if (error.message.includes('body.children.length')) {
                 res.status(400).json({ error: 'Content too long for Notion. The analysis has been truncated to fit Notion\'s limits.' });
             } else {
-                res.status(400).json({ 
+                res.status(400).json({
                     error: 'Database schema mismatch. Please ensure your Notion database has the required properties: Title (title), URL (url), Channel (rich_text), Published Date (date), Views (number), Likes (number), Content (url).',
                     details: error.message
                 });
@@ -768,7 +795,7 @@ app.post('/api/notion/saveNote', async (req, res) => {
 // Create child page blocks with detailed content
 function createChildPageBlocks(videoInfo, markdown) {
     const blocks = [];
-    
+
     // Add video metadata section
     blocks.push({
         type: 'heading_2',
@@ -779,14 +806,14 @@ function createChildPageBlocks(videoInfo, markdown) {
             }]
         }
     });
-    
+
     // Add metadata as rich text
     const publishDate = new Date(videoInfo.publishedAt).toLocaleDateString('en-AU', {
         year: 'numeric',
         month: 'long',
         day: 'numeric'
     });
-    
+
     blocks.push({
         type: 'paragraph',
         paragraph: {
@@ -796,7 +823,7 @@ function createChildPageBlocks(videoInfo, markdown) {
             ]
         }
     });
-    
+
     blocks.push({
         type: 'paragraph',
         paragraph: {
@@ -806,7 +833,7 @@ function createChildPageBlocks(videoInfo, markdown) {
             ]
         }
     });
-    
+
     blocks.push({
         type: 'paragraph',
         paragraph: {
@@ -816,7 +843,7 @@ function createChildPageBlocks(videoInfo, markdown) {
             ]
         }
     });
-    
+
     blocks.push({
         type: 'paragraph',
         paragraph: {
@@ -826,7 +853,7 @@ function createChildPageBlocks(videoInfo, markdown) {
             ]
         }
     });
-    
+
     blocks.push({
         type: 'paragraph',
         paragraph: {
@@ -836,13 +863,13 @@ function createChildPageBlocks(videoInfo, markdown) {
             ]
         }
     });
-    
+
     // Add divider
     blocks.push({
         type: 'divider',
         divider: {}
     });
-    
+
     // Add video description section
     blocks.push({
         type: 'heading_2',
@@ -853,12 +880,12 @@ function createChildPageBlocks(videoInfo, markdown) {
             }]
         }
     });
-    
+
     // Add description (truncated if too long)
-    const description = videoInfo.description.length > 500 
+    const description = videoInfo.description.length > 500
         ? videoInfo.description.substring(0, 500) + '...'
         : videoInfo.description;
-    
+
     blocks.push({
         type: 'paragraph',
         paragraph: {
@@ -868,23 +895,23 @@ function createChildPageBlocks(videoInfo, markdown) {
             }]
         }
     });
-    
+
     // Add divider
     blocks.push({
         type: 'divider',
         divider: {}
     });
-    
+
     // Parse and add the AI analysis content
     const analysisBlocks = parseMarkdownToNotionBlocks(markdown);
     blocks.push(...analysisBlocks);
-    
+
     // Add closing note
     blocks.push({
         type: 'divider',
         divider: {}
     });
-    
+
     blocks.push({
         type: 'paragraph',
         paragraph: {
@@ -895,7 +922,7 @@ function createChildPageBlocks(videoInfo, markdown) {
             }]
         }
     });
-    
+
     return blocks;
 }
 
@@ -908,7 +935,7 @@ function parseMarkdownToNotionBlocks(markdown) {
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        
+
         if (!line) {
             // End current list if exists
             if (currentList) {
@@ -930,7 +957,7 @@ function parseMarkdownToNotionBlocks(markdown) {
 
             const level = line.match(/^#+/)[0].length;
             const content = line.replace(/^#+\s*/, '');
-            
+
             if (level === 1) {
                 blocks.push({
                     type: 'heading_1',
@@ -966,7 +993,7 @@ function parseMarkdownToNotionBlocks(markdown) {
         // Handle bullet points
         else if (line.startsWith('- ') || line.startsWith('* ')) {
             const content = line.replace(/^[-*]\s*/, '');
-            
+
             if (currentListType !== 'bulleted') {
                 if (currentList) {
                     blocks.push(...currentList);
@@ -974,7 +1001,7 @@ function parseMarkdownToNotionBlocks(markdown) {
                 currentList = [];
                 currentListType = 'bulleted';
             }
-            
+
             currentList.push({
                 type: 'bulleted_list_item',
                 bulleted_list_item: {
@@ -988,7 +1015,7 @@ function parseMarkdownToNotionBlocks(markdown) {
         // Handle numbered lists
         else if (/^\d+\.\s/.test(line)) {
             const content = line.replace(/^\d+\.\s*/, '');
-            
+
             if (currentListType !== 'numbered') {
                 if (currentList) {
                     blocks.push(...currentList);
@@ -996,7 +1023,7 @@ function parseMarkdownToNotionBlocks(markdown) {
                 currentList = [];
                 currentListType = 'numbered';
             }
-            
+
             currentList.push({
                 type: 'numbered_list_item',
                 numbered_list_item: {
@@ -1152,7 +1179,7 @@ app.post('/api/saveToNotion', async (req, res) => {
 
         // Step 2: Create child page with detailed content
         const childPageBlocks = createChildPageBlocks(videoInfo, markdown);
-        
+
         // Notion has a limit of 100 blocks per request, so we need to split if needed
         const maxBlocksPerRequest = 100;
         const childPage = await notion.pages.create({
@@ -1213,7 +1240,7 @@ app.post('/api/saveToNotion', async (req, res) => {
             if (error.message.includes('body.children.length')) {
                 res.status(400).json({ error: 'Content too long for Notion. The analysis has been truncated to fit Notion\'s limits.' });
             } else {
-                res.status(400).json({ 
+                res.status(400).json({
                     error: 'Database schema mismatch. Please ensure your Notion database has the required properties: Title (title), URL (url), Channel (rich_text), Published Date (date), Views (number), Likes (number), Content (url).',
                     details: error.message
                 });
@@ -1261,11 +1288,11 @@ app.post('/api/folders/favorites', async (req, res) => {
 app.delete('/api/folders/favorites', async (req, res) => {
     try {
         const { folderPath } = req.body;
-        
+
         if (!folderPath) {
             return res.status(400).json({ error: 'Folder path is required' });
         }
-        
+
         const favorites = await fileSystem.removeFavoriteFolder(folderPath);
         res.json({ success: true, favorites, message: 'Folder removed from favorites' });
     } catch (error) {
@@ -1279,7 +1306,7 @@ app.get('/api/folders/browse', async (req, res) => {
     try {
         const commonDirs = await fileSystem.getCommonDirectories();
         const favorites = await fileSystem.getFavoriteFolders();
-        
+
         // Check which favorites are still accessible
         const accessibleFavorites = [];
         for (const favorite of favorites) {
@@ -1288,7 +1315,7 @@ app.get('/api/folders/browse', async (req, res) => {
                 accessibleFavorites.push(favorite);
             }
         }
-        
+
         res.json({
             success: true,
             commonDirectories: commonDirs,
@@ -1304,13 +1331,13 @@ app.get('/api/folders/browse', async (req, res) => {
 app.post('/api/download/save', async (req, res) => {
     try {
         const { content, filename, folderPath, overwrite } = req.body;
-        
+
         if (!content || !filename || !folderPath) {
-            return res.status(400).json({ 
-                error: 'Missing required fields: content, filename, or folderPath' 
+            return res.status(400).json({
+                error: 'Missing required fields: content, filename, or folderPath'
             });
         }
-        
+
         const result = await fileSystem.saveMarkdownToFolder(content, filename, folderPath, !!overwrite);
         if (result.needsConfirmation) {
             return res.status(409).json({

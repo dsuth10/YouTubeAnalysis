@@ -90,13 +90,13 @@ async function browseForFolder() {
             currentDirectoryHandle = directoryHandle;
             const folderPath = directoryHandle.name;
             downloadFolderPath.value = folderPath;
-            
+
             // Enable the add to favorites button
             addCurrentToFavoritesBtn.disabled = false;
-            
+
             // Update the folder path display
             updateFolderPathDisplay(folderPath);
-            
+
             showNotification(`Selected folder: ${folderPath}`, 'success');
         }
     } catch (error) {
@@ -129,7 +129,7 @@ async function saveFileWithFileSystemAccess(content, filename, mimeType = 'text/
             const writable = await fileHandle.createWritable();
             await writable.write(content);
             await writable.close();
-            
+
             showNotification(`File saved successfully to: ${currentDirectoryHandle.name}/${filename}`, 'success');
             return true;
         }
@@ -154,7 +154,7 @@ async function downloadMarkdown(content, filename) {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
+
         showNotification('File downloaded successfully to Downloads folder!', 'success');
     } catch (error) {
         console.error('Error downloading file:', error);
@@ -175,7 +175,7 @@ async function downloadText(content, filename) {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
+
         showNotification('File downloaded successfully to Downloads folder!', 'success');
     } catch (error) {
         console.error('Error downloading file:', error);
@@ -188,7 +188,7 @@ function showNotification(message, type = 'info') {
     // Remove existing notifications
     const existingNotifications = document.querySelectorAll('.notification');
     existingNotifications.forEach(notification => notification.remove());
-    
+
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
@@ -201,10 +201,10 @@ function showNotification(message, type = 'info') {
             </button>
         </div>
     `;
-    
+
     // Add to page
     document.body.appendChild(notification);
-    
+
     // Auto-remove after 5 seconds
     setTimeout(() => {
         if (notification.parentElement) {
@@ -228,7 +228,7 @@ function updateSaveButtonState() {
     const filename = downloadFilename.value.trim();
     const folderPath = downloadFolderPath.value.trim();
     const hasValidInputs = filename && (folderPath || currentDirectoryHandle);
-    
+
     saveMarkdownBtn.disabled = !hasValidInputs;
 }
 
@@ -242,7 +242,7 @@ function isFolderInFavorites(folderPath) {
 function addFolderToFavorites(folderPath) {
     const favorites = JSON.parse(localStorage.getItem('favoriteFolders') || '[]');
     const folderName = folderPath.split(/[\\/]/).pop() || folderPath;
-    
+
     if (!isFolderInFavorites(folderPath)) {
         favorites.push({
             name: folderName,
@@ -258,12 +258,12 @@ function addFolderToFavorites(folderPath) {
 function loadFavoriteFolders() {
     const favorites = JSON.parse(localStorage.getItem('favoriteFolders') || '[]');
     const container = document.getElementById('favoriteFoldersList');
-    
+
     if (favorites.length === 0) {
         container.innerHTML = '<p class="no-favorites">No favorite folders yet. Add some to get started!</p>';
         return;
     }
-    
+
     container.innerHTML = favorites.map(fav => `
         <div class="favorite-folder" data-path="${fav.path}">
             <span class="folder-name">${fav.name}</span>
@@ -301,7 +301,7 @@ function loadCommonDirectories() {
         { name: 'Downloads', path: '~/Downloads' },
         { name: 'Pictures', path: '~/Pictures' }
     ];
-    
+
     const container = document.getElementById('commonDirectoriesList');
     container.innerHTML = commonDirs.map(dir => `
         <button class="common-directory-btn" onclick="useCommonDirectory('${dir.path}')" title="${dir.path}">
@@ -336,7 +336,7 @@ let allModels = []; // Store all available models
 let favoriteModels = []; // Store favorite model IDs
 
 // Initialize the app
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     clearApiWarnings(); // Clear any existing API warnings on page load
     loadSettings();
     loadFavorites(); // Load favorites before models
@@ -352,37 +352,37 @@ document.addEventListener('DOMContentLoaded', function() {
 function setupEventListeners() {
     // Form submission
     analysisForm.addEventListener('submit', handleFormSubmit);
-    
+
     // Model search functionality
     modelSearch.addEventListener('input', filterModels);
     modelSelect.addEventListener('change', updateModelInfo);
-    
+
     // Favorite toggle functionality
     favoriteToggleBtn.addEventListener('click', handleFavoriteToggle);
     favoritesOnlyCheckbox.addEventListener('change', filterModels);
     favoritesFilterBtn.addEventListener('click', toggleFavoritesFilter);
-    
+
     // Action buttons
     downloadBtn.addEventListener('click', handleDownload);
     previewBtn.addEventListener('click', handlePreview);
     exportBtn.addEventListener('click', handleExportToNotion);
-    
+
     // Additional download buttons
     const downloadPromptBtn = document.getElementById('downloadPromptBtn');
     const downloadTranscriptBtn = document.getElementById('downloadTranscriptBtn');
     const downloadRawSubsBtn = document.getElementById('downloadRawSubsBtn');
     const downloadDescriptionBtn = document.getElementById('downloadDescriptionBtn');
-    
+
     if (downloadPromptBtn) downloadPromptBtn.addEventListener('click', handlePromptDownload);
     if (downloadTranscriptBtn) downloadTranscriptBtn.addEventListener('click', handleTranscriptDownload);
     if (downloadRawSubsBtn) downloadRawSubsBtn.addEventListener('click', handleTranscriptDownload); // Same as transcript
     if (downloadDescriptionBtn) downloadDescriptionBtn.addEventListener('click', handleDescriptionDownload);
     newAnalysisBtn.addEventListener('click', handleNewAnalysis);
     retryBtn.addEventListener('click', handleRetry);
-    
+
     // Preview controls
     closePreviewBtn.addEventListener('click', closePreview);
-    
+
     // Modal controls
     settingsBtn.addEventListener('click', openSettings);
     helpBtn.addEventListener('click', openHelp);
@@ -391,17 +391,17 @@ function setupEventListeners() {
     saveSettingsBtn.addEventListener('click', saveSettings);
     cancelSettingsBtn.addEventListener('click', closeSettings);
     closeHelpModalBtn.addEventListener('click', closeHelp);
-    
+
     // Download modal controls
     closeDownloadBtn.addEventListener('click', hideDownloadModal);
     cancelDownloadBtn.addEventListener('click', hideDownloadModal);
     // Browse folder button
     browseFolderBtn.addEventListener('click', browseForFolder);
-    
+
     // Download modal form validation
     downloadFilename.addEventListener('input', updateSaveButtonState);
     downloadFolderPath.addEventListener('input', updateSaveButtonState);
-    
+
     // Add current folder to favorites
     addCurrentToFavoritesBtn.addEventListener('click', () => {
         const folderPath = downloadFolderPath.value.trim();
@@ -410,25 +410,25 @@ function setupEventListeners() {
             showNotification('Folder added to favorites!', 'success');
         }
     });
-    
+
     // Save markdown button - now uses direct download
     saveMarkdownBtn.addEventListener('click', handleDownload);
-    
+
     // Close modals on outside click
-    window.addEventListener('click', function(event) {
+    window.addEventListener('click', function (event) {
         if (event.target === settingsModal) closeSettings();
         if (event.target === helpModal) closeHelp();
         if (event.target === downloadModal) hideDownloadModal();
     });
-    
+
     // Keyboard shortcuts
-    document.addEventListener('keydown', function(event) {
+    document.addEventListener('keydown', function (event) {
         // Ctrl/Cmd + F to focus on model search
         if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
             event.preventDefault();
             modelSearch.focus();
         }
-        
+
         // Ctrl/Cmd + S to toggle favorite for selected model
         if ((event.ctrlKey || event.metaKey) && event.key === 's') {
             event.preventDefault();
@@ -440,22 +440,22 @@ function setupEventListeners() {
 // Handle form submission
 async function handleFormSubmit(e) {
     e.preventDefault();
-    
+
     const url = youtubeUrlInput.value.trim();
     const model = modelSelect.value;
     const promptId = promptSelect.value;
-    
+
     if (!url) {
         showError('Please enter a YouTube URL');
         return;
     }
-    
+
     // Validate YouTube URL
     if (!isValidYouTubeUrl(url)) {
         showError('Please enter a valid YouTube URL');
         return;
     }
-    
+
     // Start analysis
     await analyzeVideo(url, model, promptId);
 }
@@ -467,7 +467,7 @@ function isValidYouTubeUrl(url) {
         /^(https?:\/\/)?(www\.)?youtube\.com\/v\//,
         /^(https?:\/\/)?(www\.)?youtube\.com\/watch\?.*v=/
     ];
-    
+
     return patterns.some(pattern => pattern.test(url));
 }
 
@@ -476,7 +476,7 @@ async function analyzeVideo(url, model, promptId) {
     try {
         showLoading();
         updateLoadingMessage('Fetching video information...');
-        
+
         const response = await fetch('/api/process', {
             method: 'POST',
             headers: {
@@ -484,16 +484,16 @@ async function analyzeVideo(url, model, promptId) {
             },
             body: JSON.stringify({ url, model, promptId })
         });
-        
+
         const data = await response.json();
-        
+
         if (!response.ok) {
             throw new Error(data.error || 'Failed to analyze video');
         }
-        
+
         currentResult = data;
         showResult(data);
-        
+
     } catch (error) {
         console.error('Analysis error:', error);
         showError(error.message);
@@ -515,7 +515,7 @@ function updateLoadingMessage(message) {
 // Show result
 function showResult(data) {
     hideAllSections();
-    
+
     // Use generated title if available
     const displayTitle = data.videoInfo.generatedTitle || data.videoInfo.title;
     videoTitle.textContent = displayTitle;
@@ -523,11 +523,11 @@ function showResult(data) {
     videoViews.textContent = formatNumber(data.videoInfo.viewCount) + ' views';
     videoLikes.textContent = formatNumber(data.videoInfo.likeCount) + ' likes';
     videoDate.textContent = formatDate(data.videoInfo.publishedAt);
-    
+
     // Set thumbnail
     videoThumbnail.src = `https://img.youtube.com/vi/${data.videoInfo.videoId}/mqdefault.jpg`;
     videoThumbnail.alt = displayTitle;
-    
+
     // Show AI badge if generatedTitle is present and different
     const aiBadgeId = 'ai-title-badge';
     let aiBadge = document.getElementById(aiBadgeId);
@@ -547,7 +547,16 @@ function showResult(data) {
     } else if (aiBadge) {
         aiBadge.style.display = 'none';
     }
-    
+
+    // Show transcript metadata
+    const transcriptMeta = document.getElementById('transcriptMeta');
+    const transcriptSourceLabel = document.getElementById('transcriptSourceLabel');
+    if (transcriptMeta && transcriptSourceLabel && data.videoInfo.transcript) {
+        transcriptMeta.style.display = 'flex';
+        transcriptSourceLabel.textContent = `Transcript source: ${data.videoInfo.source || 'Unknown'}`;
+        transcriptSourceLabel.classList.add('source-' + (data.videoInfo.source || 'default').toLowerCase().replace(/\s+/g, '-'));
+    }
+
     resultSection.classList.remove('hidden');
     analyzeBtn.disabled = false;
 }
@@ -571,12 +580,12 @@ function hideAllSections() {
 // Handle download - direct download to Downloads folder
 function handleDownload() {
     if (!currentResult) return;
-    
+
     // Generate filename with timestamp to avoid conflicts
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const baseFilename = currentResult.filename.replace('.md', '');
     const filename = `${baseFilename}_${timestamp}.md`;
-    
+
     // Direct download to Downloads folder
     downloadMarkdown(currentResult.markdown, filename);
 }
@@ -587,12 +596,12 @@ function handleTranscriptDownload() {
         showNotification('No transcript available for download.', 'error');
         return;
     }
-    
+
     // Generate filename with timestamp to avoid conflicts
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const baseFilename = currentResult.filename.replace('.md', '');
     const filename = `${baseFilename}_transcript_${timestamp}.txt`;
-    
+
     // Direct download to Downloads folder
     downloadText(currentResult.transcript, filename);
 }
@@ -603,12 +612,12 @@ function handleDescriptionDownload() {
         showNotification('No description available for download.', 'error');
         return;
     }
-    
+
     // Generate filename with timestamp to avoid conflicts
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const baseFilename = currentResult.filename.replace('.md', '');
     const filename = `${baseFilename}_description_${timestamp}.txt`;
-    
+
     // Direct download to Downloads folder
     downloadText(currentResult.videoInfo.description, filename);
 }
@@ -619,12 +628,12 @@ function handlePromptDownload() {
         showNotification('No prompt content available for download.', 'error');
         return;
     }
-    
+
     // Generate filename with timestamp to avoid conflicts
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const baseFilename = currentResult.filename.replace('.md', '');
     const filename = `${baseFilename}_prompt_${timestamp}.md`;
-    
+
     // Direct download to Downloads folder
     downloadMarkdown(currentResult.markdown, filename);
 }
@@ -632,7 +641,7 @@ function handlePromptDownload() {
 // Handle preview
 function handlePreview() {
     if (!currentResult) return;
-    
+
     markdownPreview.textContent = currentResult.markdown;
     previewSection.classList.remove('hidden');
 }
@@ -646,51 +655,51 @@ function closePreview() {
 function handleNewAnalysis() {
     hideAllSections();
     analysisForm.classList.remove('hidden');
-    
+
     // Clear all form inputs
     youtubeUrlInput.value = '';
-    
+
     // Clear manual transcript input
     const manualTranscriptInput = document.getElementById('manualTranscriptInput');
     if (manualTranscriptInput) {
         manualTranscriptInput.value = '';
     }
-    
+
     // Reset prompt template selection
     const promptTemplateSelect = document.getElementById('promptTemplateSelect');
     if (promptTemplateSelect) {
         promptTemplateSelect.value = '';
     }
-    
+
     // Clear edited prompt textarea
     const editedPromptTextarea = document.getElementById('editedPromptTextarea');
     if (editedPromptTextarea) {
         editedPromptTextarea.value = '';
     }
-    
+
     // Uncheck "use edited prompt" checkbox
     const useEditedPromptCheckbox = document.getElementById('useEditedPromptCheckbox');
     if (useEditedPromptCheckbox) {
         useEditedPromptCheckbox.checked = false;
     }
-    
+
     // Hide prompt editor container
     const promptEditorContainer = document.getElementById('promptEditorContainer');
     if (promptEditorContainer) {
         promptEditorContainer.style.display = 'none';
     }
-    
+
     // Reset prompt status indicators
     const promptStatusText = document.getElementById('promptStatusText');
     if (promptStatusText) {
         promptStatusText.textContent = 'Original template will be used';
     }
-    
+
     const promptLength = document.getElementById('promptLength');
     if (promptLength) {
         promptLength.textContent = '0 / 5000 characters';
     }
-    
+
     currentResult = null;
 }
 
@@ -713,7 +722,7 @@ async function handleExportToNotion() {
     try {
         exportBtn.disabled = true;
         exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exporting...';
-        
+
         const videoInfoToSend = { ...currentResult.videoInfo };
         if (currentResult.videoInfo.generatedTitle) {
             videoInfoToSend.generatedTitle = currentResult.videoInfo.generatedTitle;
@@ -729,16 +738,16 @@ async function handleExportToNotion() {
                 databaseId: selectedDatabaseId || null
             })
         });
-        
+
         const data = await response.json();
-        
+
         if (!response.ok) {
             throw new Error(data.error || 'Failed to export to Notion');
         }
-        
+
         // Success
         alert(`✅ ${data.message}\n\nMain Page: ${data.pageUrl}\nAnalysis Page: ${data.childPageUrl}`);
-        
+
     } catch (error) {
         console.error('Export error:', error);
         alert(`Export failed: ${error.message}`);
@@ -753,32 +762,32 @@ async function loadModels() {
     try {
         const response = await fetch('/api/models');
         const data = await response.json();
-        
+
         // Store all models globally and add favorite status
         allModels = data.models.map(model => ({
             ...model,
             isFavorite: isFavorite(model.id)
         }));
-        
+
         // Sort models: favorites first, then alphabetically
         allModels.sort((a, b) => {
             if (a.isFavorite && !b.isFavorite) return -1;
             if (!a.isFavorite && b.isFavorite) return 1;
             return a.name.localeCompare(b.name);
         });
-        
+
         // Populate the select with all models
         populateModelSelect(allModels);
-        
+
         // Set default selection and update info
         if (allModels.length > 0) {
             modelSelect.value = allModels[0].id;
             updateModelInfo();
         }
-        
+
         // Update model statistics
         updateModelStats();
-        
+
     } catch (error) {
         console.error('Error loading models:', error);
     }
@@ -789,7 +798,7 @@ async function loadPrompts() {
     try {
         const response = await fetch('/api/prompts');
         const data = await response.json();
-        
+
         if (response.ok) {
             populatePromptSelect(data.prompts);
         } else {
@@ -805,11 +814,11 @@ async function loadPrompts() {
 // Populate model select dropdown
 function populateModelSelect(models) {
     modelSelect.innerHTML = '';
-    
+
     // Add favorites section if there are favorites
     const favoriteModels = models.filter(model => model.isFavorite);
     const nonFavoriteModels = models.filter(model => !model.isFavorite);
-    
+
     if (favoriteModels.length > 0) {
         // Add favorites section header
         const favoritesHeader = document.createElement('option');
@@ -818,7 +827,7 @@ function populateModelSelect(models) {
         favoritesHeader.style.fontWeight = 'bold';
         favoritesHeader.style.backgroundColor = '#f8f9fa';
         modelSelect.appendChild(favoritesHeader);
-        
+
         // Add favorite models
         favoriteModels.forEach(model => {
             const option = document.createElement('option');
@@ -829,7 +838,7 @@ function populateModelSelect(models) {
             option.style.fontWeight = '500';
             modelSelect.appendChild(option);
         });
-        
+
         // Add separator if there are non-favorites
         if (nonFavoriteModels.length > 0) {
             const separator = document.createElement('option');
@@ -839,7 +848,7 @@ function populateModelSelect(models) {
             modelSelect.appendChild(separator);
         }
     }
-    
+
     // Add non-favorite models
     nonFavoriteModels.forEach(model => {
         const option = document.createElement('option');
@@ -853,13 +862,13 @@ function populateModelSelect(models) {
 // Populate prompt select dropdown
 function populatePromptSelect(prompts) {
     promptSelect.innerHTML = '';
-    
+
     // Add default option
     const defaultOption = document.createElement('option');
     defaultOption.value = '';
     defaultOption.textContent = 'Default Analysis (General)';
     promptSelect.appendChild(defaultOption);
-    
+
     // Add all prompts
     prompts.forEach(prompt => {
         const option = document.createElement('option');
@@ -873,31 +882,31 @@ function populatePromptSelect(prompts) {
 function filterModels() {
     const searchTerm = modelSearch.value.toLowerCase();
     const showFavoritesOnly = favoritesOnlyCheckbox.checked;
-    
+
     // Update filter button state
     favoritesFilterBtn.classList.toggle('active', showFavoritesOnly);
-    
+
     let filteredModels = allModels.filter(model => {
         // First filter by favorites only if checkbox is checked
         if (showFavoritesOnly && !model.isFavorite) {
             return false;
         }
-        
+
         // Then filter by search term
         return model.name.toLowerCase().includes(searchTerm) ||
-               model.id.toLowerCase().includes(searchTerm) ||
-               model.provider.toLowerCase().includes(searchTerm);
+            model.id.toLowerCase().includes(searchTerm) ||
+            model.provider.toLowerCase().includes(searchTerm);
     });
-    
+
     // Sort filtered models: favorites first, then alphabetically
     filteredModels.sort((a, b) => {
         if (a.isFavorite && !b.isFavorite) return -1;
         if (!a.isFavorite && b.isFavorite) return 1;
         return a.name.localeCompare(b.name);
     });
-    
+
     populateModelSelect(filteredModels);
-    
+
     // Update model info if current selection is still valid
     if (filteredModels.some(model => model.id === modelSelect.value)) {
         updateModelInfo();
@@ -910,14 +919,14 @@ function filterModels() {
 // Update model info display
 function updateModelInfo() {
     const selectedModel = allModels.find(model => model.id === modelSelect.value);
-    
+
     if (selectedModel) {
         const providerSpan = modelInfo.querySelector('.model-provider');
         const pricingSpan = modelInfo.querySelector('.model-pricing');
         const contextSpan = modelInfo.querySelector('.model-context');
-        
+
         providerSpan.textContent = selectedModel.provider;
-        
+
         if (selectedModel.pricing && selectedModel.pricing.input > 0) {
             const inputCost = (selectedModel.pricing.input * 1000).toFixed(2);
             const outputCost = (selectedModel.pricing.output * 1000).toFixed(2);
@@ -925,17 +934,17 @@ function updateModelInfo() {
         } else {
             pricingSpan.textContent = 'Pricing not available';
         }
-        
+
         if (selectedModel.context_length) {
             const contextK = Math.round(selectedModel.context_length / 1000);
             contextSpan.textContent = `${contextK}K context`;
         } else {
             contextSpan.textContent = 'Context length unknown';
         }
-        
+
         // Update favorite toggle button
         updateFavoriteToggle(selectedModel);
-        
+
         // Update favorite count
         updateFavoriteCount();
     } else {
@@ -951,7 +960,7 @@ async function checkHealth() {
     try {
         const response = await fetch('/api/health');
         const data = await response.json();
-        
+
         // Check if any required API keys are missing from environment configuration
         if (!data.apiKeysConfigured?.youtube || !data.apiKeysConfigured?.openrouter) {
             showApiWarning(data);
@@ -965,21 +974,21 @@ async function checkHealth() {
 function showApiWarning(healthData) {
     // Clear any existing API warnings first
     clearApiWarnings();
-    
+
     const warnings = [];
     const missingKeys = [];
-    
+
     // Check if API keys are configured in the environment (.env file)
     if (!healthData.apiKeysConfigured?.youtube) {
         warnings.push('YouTube API key not configured');
         missingKeys.push('youtube');
     }
-    
+
     if (!healthData.apiKeysConfigured?.openrouter) {
         warnings.push('OpenRouter API key not configured');
         missingKeys.push('openrouter');
     }
-    
+
     if (warnings.length > 0) {
         const warningDiv = document.createElement('div');
         warningDiv.className = 'api-warning';
@@ -989,16 +998,16 @@ function showApiWarning(healthData) {
                 <a href="#" id="configureNowBtn" style="color: #667eea; text-decoration: underline;">Configure now</a>
             </div>
         `;
-        
+
         const mainContent = document.querySelector('.main-content');
         mainContent.insertBefore(warningDiv, mainContent.firstChild);
-        
+
         document.getElementById('configureNowBtn').addEventListener('click', (e) => {
             e.preventDefault();
             openSettings();
         });
     }
-    
+
     // Store missing keys for use in settings modal
     window.missingApiKeys = missingKeys;
 }
@@ -1026,23 +1035,23 @@ function saveSettings() {
     const settings = {
         notionToken: notionTokenInput.value // Always save Notion token as it's optional
     };
-    
+
     // Only save API keys that are not configured in the environment
     if (missingKeys.includes('youtube')) {
         settings.youtubeApiKey = youtubeApiKeyInput.value;
     }
-    
+
     if (missingKeys.includes('openrouter')) {
         settings.openrouterApiKey = openrouterApiKeyInput.value;
     }
-    
+
     localStorage.setItem('youtubeAnalysisSettings', JSON.stringify(settings));
     closeSettings();
-    
+
     // Reload models and check health
     loadModels();
     checkHealth();
-    
+
     // Recheck Notion connection
     setTimeout(checkNotionConnection, 1000);
 }
@@ -1050,20 +1059,20 @@ function saveSettings() {
 function loadSettings() {
     const settings = JSON.parse(localStorage.getItem('youtubeAnalysisSettings') || '{}');
     const missingKeys = window.missingApiKeys || [];
-    
+
     // Only load API keys that are not configured in the environment
     if (missingKeys.includes('youtube')) {
         youtubeApiKeyInput.value = settings.youtubeApiKey || '';
     } else {
         youtubeApiKeyInput.value = '';
     }
-    
+
     if (missingKeys.includes('openrouter')) {
         openrouterApiKeyInput.value = settings.openrouterApiKey || '';
     } else {
         openrouterApiKeyInput.value = '';
     }
-    
+
     // Always load Notion token as it's optional
     notionTokenInput.value = settings.notionToken || '';
 }
@@ -1071,13 +1080,13 @@ function loadSettings() {
 // Update API key input fields visibility based on environment configuration
 function updateApiKeyFields() {
     const missingKeys = window.missingApiKeys || [];
-    
+
     // Get the parent containers for each API key field
     const youtubeContainer = document.getElementById('youtubeApiKeyGroup');
     const openrouterContainer = document.getElementById('openrouterApiKeyGroup');
     const notionContainer = notionTokenInput.closest('.form-group');
     const apiKeysInfo = document.getElementById('apiKeysConfiguredInfo');
-    
+
     // Show/hide YouTube API key field
     if (missingKeys.includes('youtube')) {
         youtubeContainer.style.display = 'block';
@@ -1086,7 +1095,7 @@ function updateApiKeyFields() {
         youtubeContainer.style.display = 'none';
         youtubeApiKeyInput.value = ''; // Clear the field when hidden
     }
-    
+
     // Show/hide OpenRouter API key field
     if (missingKeys.includes('openrouter')) {
         openrouterContainer.style.display = 'block';
@@ -1095,17 +1104,17 @@ function updateApiKeyFields() {
         openrouterContainer.style.display = 'none';
         openrouterApiKeyInput.value = ''; // Clear the field when hidden
     }
-    
+
     // Always show Notion token field (it's optional)
     notionContainer.style.display = 'block';
-    
+
     // Show/hide the "API Keys Configured" info message
     if (missingKeys.length === 0) {
         apiKeysInfo.style.display = 'block';
     } else {
         apiKeysInfo.style.display = 'none';
     }
-    
+
     // Update the settings modal title to reflect the configuration status
     const settingsTitle = document.querySelector('#settingsModal .modal-header h3');
     if (settingsTitle) {
@@ -1154,29 +1163,29 @@ function addAnimations() {
         section.style.transform = 'translateY(20px)';
         section.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
     });
-    
+
     // Show sections with animation
     function showSectionWithAnimation(section) {
         section.style.opacity = '1';
         section.style.transform = 'translateY(0)';
     }
-    
+
     // Override show functions to include animation
     const originalShowLoading = showLoading;
     const originalShowResult = showResult;
     const originalShowError = showError;
-    
-    showLoading = function() {
+
+    showLoading = function () {
         originalShowLoading();
         setTimeout(() => showSectionWithAnimation(loadingSection), 10);
     };
-    
-    showResult = function(data) {
+
+    showResult = function (data) {
         originalShowResult(data);
         setTimeout(() => showSectionWithAnimation(resultSection), 10);
     };
-    
-    showError = function(message) {
+
+    showError = function (message) {
         originalShowError(message);
         setTimeout(() => showSectionWithAnimation(errorSection), 10);
     };
@@ -1207,7 +1216,7 @@ function initializeNotion() {
     refreshDatabasesBtn.addEventListener('click', loadNotionDatabases);
     databaseSelect.addEventListener('change', handleDatabaseSelect);
     saveToNotionBtn.addEventListener('click', handleSaveToNotion);
-    
+
     // Check if Notion token exists
     checkNotionConnection();
 }
@@ -1217,7 +1226,7 @@ async function checkNotionConnection() {
     try {
         const response = await fetch('/api/health');
         const data = await response.json();
-        
+
         if (data.notionApi) {
             updateNotionStatus('connected', 'Connected');
             await loadNotionDatabases();
@@ -1234,10 +1243,10 @@ async function checkNotionConnection() {
 function updateNotionStatus(status, text) {
     const indicator = notionStatus.querySelector('.status-indicator');
     const statusText = notionStatus.querySelector('.status-text');
-    
+
     indicator.className = `status-indicator ${status}`;
     statusText.textContent = text;
-    
+
     if (status === 'connected') {
         notionSetup.classList.add('hidden');
         notionConnected.classList.remove('hidden');
@@ -1252,7 +1261,7 @@ async function handleConnectNotion() {
     try {
         updateNotionStatus('loading', 'Connecting...');
         connectNotionBtn.disabled = true;
-        
+
         // Check if token is provided in settings
         const settings = JSON.parse(localStorage.getItem('youtubeAnalysisSettings') || '{}');
         if (!settings.notionToken) {
@@ -1262,10 +1271,10 @@ async function handleConnectNotion() {
             connectNotionBtn.disabled = false;
             return;
         }
-        
+
         // Test connection by fetching databases
         await loadNotionDatabases();
-        
+
     } catch (error) {
         console.error('Error connecting to Notion:', error);
         updateNotionStatus('disconnected', 'Connection failed');
@@ -1278,26 +1287,26 @@ async function loadNotionDatabases() {
     try {
         updateNotionStatus('loading', 'Loading databases...');
         refreshDatabasesBtn.disabled = true;
-        
+
         const response = await fetch('/api/notion/databases');
         const data = await response.json();
-        
+
         if (!response.ok) {
             throw new Error(data.error || 'Failed to load databases');
         }
-        
+
         notionDatabases = data.databases;
         populateDatabaseSelect();
-        
+
         if (notionDatabases.length > 0) {
             updateNotionStatus('connected', `Connected (${notionDatabases.length} databases)`);
         } else {
             updateNotionStatus('connected', 'Connected (no databases found)');
         }
-        
+
     } catch (error) {
         console.error('Error loading Notion databases:', error);
-        
+
         if (error.message.includes('Invalid Notion API token')) {
             updateNotionStatus('disconnected', 'Invalid token');
             openSettings();
@@ -1314,7 +1323,7 @@ async function loadNotionDatabases() {
 // Populate database select dropdown
 function populateDatabaseSelect() {
     databaseSelect.innerHTML = '';
-    
+
     if (notionDatabases.length === 0) {
         const option = document.createElement('option');
         option.value = '';
@@ -1322,13 +1331,13 @@ function populateDatabaseSelect() {
         databaseSelect.appendChild(option);
         return;
     }
-    
+
     // Add default option
     const defaultOption = document.createElement('option');
     defaultOption.value = '';
     defaultOption.textContent = 'Select a database...';
     databaseSelect.appendChild(defaultOption);
-    
+
     // Add database options
     notionDatabases.forEach(db => {
         const option = document.createElement('option');
@@ -1342,7 +1351,7 @@ function populateDatabaseSelect() {
 function handleDatabaseSelect() {
     selectedDatabaseId = databaseSelect.value;
     saveToNotionBtn.disabled = !selectedDatabaseId;
-    
+
     if (selectedDatabaseId) {
         saveStatus.textContent = `Ready to save to: ${databaseSelect.options[databaseSelect.selectedIndex].text}`;
         saveStatus.className = 'save-status';
@@ -1357,12 +1366,12 @@ async function handleSaveToNotion() {
     if (!currentResult || !selectedDatabaseId) {
         return;
     }
-    
+
     try {
         saveToNotionBtn.disabled = true;
         saveStatus.textContent = 'Saving to Notion...';
         saveStatus.className = 'save-status loading';
-        
+
         const response = await fetch('/api/notion/saveNote', {
             method: 'POST',
             headers: {
@@ -1374,13 +1383,13 @@ async function handleSaveToNotion() {
                 markdown: currentResult.markdown
             })
         });
-        
+
         const data = await response.json();
-        
+
         if (!response.ok) {
             throw new Error(data.error || 'Failed to save to Notion');
         }
-        
+
         // Success
         saveStatus.innerHTML = `
             <span class="success">✅ ${data.message}</span>
@@ -1388,7 +1397,7 @@ async function handleSaveToNotion() {
             <br><a href="${data.childPageUrl}" target="_blank" style="color: #667eea; text-decoration: underline;">Open Analysis Page</a>
         `;
         saveStatus.className = 'save-status success';
-        
+
     } catch (error) {
         console.error('Error saving to Notion:', error);
         saveStatus.textContent = `Error: ${error.message}`;
@@ -1437,7 +1446,7 @@ function saveFavorites() {
 function toggleFavorite(modelId) {
     const index = favoriteModels.indexOf(modelId);
     const model = allModels.find(m => m.id === modelId);
-    
+
     if (index > -1) {
         // Remove from favorites
         favoriteModels.splice(index, 1);
@@ -1447,7 +1456,7 @@ function toggleFavorite(modelId) {
         favoriteModels.push(modelId);
         showNotification(`${model.name} added to favorites`, 'success');
     }
-    
+
     saveFavorites();
     updateModelDisplay();
 }
@@ -1464,16 +1473,16 @@ function updateModelDisplay() {
         allModels.forEach(model => {
             model.isFavorite = isFavorite(model.id);
         });
-        
+
         // Sort models: favorites first, then alphabetically
         allModels.sort((a, b) => {
             if (a.isFavorite && !b.isFavorite) return -1;
             if (!a.isFavorite && b.isFavorite) return 1;
             return a.name.localeCompare(b.name);
         });
-        
+
         populateModelSelect(allModels);
-        
+
         // Restore current selection if it exists
         if (modelSelect.value && allModels.some(model => model.id === modelSelect.value)) {
             updateModelInfo();
@@ -1488,9 +1497,9 @@ function updateModelDisplay() {
 function handleFavoriteClick(event, modelId) {
     event.preventDefault();
     event.stopPropagation();
-    
+
     toggleFavorite(modelId);
-    
+
     // Add visual feedback
     const star = event.target;
     star.style.transform = 'scale(1.2)';
@@ -1536,12 +1545,12 @@ function updateFavoriteCount() {
     } else {
         favoriteCount.textContent = '';
     }
-    
+
     // Update settings modal count
     if (favoritesCount) {
         favoritesCount.textContent = `${favoriteModels.length} favorite${favoriteModels.length !== 1 ? 's' : ''}`;
     }
-    
+
     // Update model stats
     updateModelStats();
 }
@@ -1563,15 +1572,15 @@ function exportFavorites() {
             exportDate: new Date().toISOString(),
             version: '1.0'
         };
-        
+
         const dataStr = JSON.stringify(favoritesData, null, 2);
         const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        
+
         const link = document.createElement('a');
         link.href = URL.createObjectURL(dataBlob);
         link.download = `youtube-analysis-favorites-${new Date().toISOString().split('T')[0]}.json`;
         link.click();
-        
+
         URL.revokeObjectURL(link.href);
     } catch (error) {
         console.error('Error exporting favorites:', error);
@@ -1583,26 +1592,26 @@ function exportFavorites() {
 function handleImportFavorites(event) {
     const file = event.target.files[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
         try {
             const data = JSON.parse(e.target.result);
-            
+
             if (data.favorites && Array.isArray(data.favorites)) {
                 // Validate that all favorites are valid model IDs
                 const validModels = allModels.map(model => model.id);
                 const validFavorites = data.favorites.filter(id => validModels.includes(id));
-                
+
                 if (validFavorites.length !== data.favorites.length) {
                     const invalidCount = data.favorites.length - validFavorites.length;
                     alert(`Warning: ${invalidCount} favorite(s) were not found in the current model list and will be skipped.`);
                 }
-                
+
                 favoriteModels = validFavorites;
                 saveFavorites();
                 updateModelDisplay();
-                
+
                 alert(`Successfully imported ${validFavorites.length} favorite(s)!`);
             } else {
                 throw new Error('Invalid favorites file format');
@@ -1612,7 +1621,7 @@ function handleImportFavorites(event) {
             alert('Error importing favorites. Please check the file format.');
         }
     };
-    
+
     reader.readAsText(file);
     event.target.value = ''; // Reset file input
 }
@@ -1635,15 +1644,15 @@ function showNotification(message, type = 'info') {
             <span>${message}</span>
         </div>
     `;
-    
+
     // Add to page
     document.body.appendChild(notification);
-    
+
     // Show notification
     setTimeout(() => {
         notification.classList.add('show');
     }, 100);
-    
+
     // Remove notification after 3 seconds
     setTimeout(() => {
         notification.classList.remove('show');
@@ -1660,19 +1669,19 @@ function showNotification(message, type = 'info') {
 // Show download modal
 function showDownloadModal() {
     downloadModal.classList.remove('hidden');
-    
+
     // Set default filename
     const videoTitle = document.getElementById('videoTitle').textContent;
     const sanitizedTitle = videoTitle.replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
     downloadFilename.value = sanitizedTitle || 'youtube-analysis';
-    
+
     // Update folder help text and status
     updateFolderHelpText();
-    
+
     // Load favorite folders and common directories
     loadFavoriteFolders();
     loadCommonDirectories();
-    
+
     // Enable/disable save button based on input
     updateSaveButtonState();
 }
@@ -1681,7 +1690,7 @@ function showDownloadModal() {
 function updateFolderHelpText() {
     const folderHelpText = document.getElementById('folderHelpText');
     const fileSystemAccessStatus = document.getElementById('fileSystemAccessStatus');
-    
+
     if (isFileSystemAccessSupported) {
         folderHelpText.textContent = 'Click "Browse" to select a folder, or type/paste the full path manually.';
         fileSystemAccessStatus.textContent = 'Folder browsing supported';
@@ -1706,7 +1715,7 @@ async function loadDownloadModalData() {
     try {
         const response = await fetch('/api/folders/browse');
         const data = await response.json();
-        
+
         if (data.success) {
             populateFavoriteFolders(data.favoriteFolders);
             populateCommonDirectories(data.commonDirectories);
@@ -1720,7 +1729,7 @@ async function loadDownloadModalData() {
 // Populate favorite folders list
 function populateFavoriteFolders(favorites) {
     favoriteFoldersList.innerHTML = '';
-    
+
     if (favorites.length === 0) {
         favoriteFoldersList.innerHTML = `
             <div class="empty-favorites">
@@ -1731,7 +1740,7 @@ function populateFavoriteFolders(favorites) {
         `;
         return;
     }
-    
+
     favorites.forEach(folderPath => {
         const folderName = folderPath.split(/[/\\]/).pop() || folderPath;
         const item = document.createElement('div');
@@ -1756,7 +1765,7 @@ function populateFavoriteFolders(favorites) {
 // Populate common directories list
 function populateCommonDirectories(directories) {
     commonDirectoriesList.innerHTML = '';
-    
+
     directories.forEach(dirPath => {
         const dirName = dirPath.split(/[/\\]/).pop() || dirPath;
         const item = document.createElement('div');
@@ -1778,7 +1787,7 @@ function populateCommonDirectories(directories) {
 function selectFavoriteFolder(folderPath) {
     downloadFolderPath.value = folderPath;
     clearFolderSelections();
-    
+
     // Highlight selected favorite
     const items = favoriteFoldersList.querySelectorAll('.favorite-folder-item');
     items.forEach(item => {
@@ -1786,7 +1795,7 @@ function selectFavoriteFolder(folderPath) {
             item.classList.add('selected');
         }
     });
-    
+
     validateDownloadForm();
 }
 
@@ -1794,7 +1803,7 @@ function selectFavoriteFolder(folderPath) {
 function selectCommonDirectory(dirPath) {
     downloadFolderPath.value = dirPath;
     clearFolderSelections();
-    
+
     // Highlight selected common directory
     const items = commonDirectoriesList.querySelectorAll('.common-directory-item');
     items.forEach(item => {
@@ -1802,7 +1811,7 @@ function selectCommonDirectory(dirPath) {
             item.classList.add('selected');
         }
     });
-    
+
     validateDownloadForm();
 }
 
@@ -1826,9 +1835,9 @@ async function removeFavoriteFolder(folderPath) {
             },
             body: JSON.stringify({ folderPath })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             showNotification('Folder removed from favorites', 'success');
             // Reload favorites list
@@ -1897,21 +1906,21 @@ async function saveMarkdownToFolder(overwrite = false) {
         showNotification('No analysis result to save', 'error');
         return;
     }
-    
+
     const filename = downloadFilename.value.trim();
     const folderPath = downloadFolderPath.value.trim();
-    
+
     if (!filename || !folderPath) {
         showNotification('Please enter both filename and folder path', 'error');
         return;
     }
     // Save last used folder
     localStorage.setItem('lastUsedFolder', folderPath);
-    
+
     try {
         saveMarkdownBtn.disabled = true;
         saveMarkdownBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-        
+
         const response = await fetch('/api/download/save', {
             method: 'POST',
             headers: {
@@ -1924,7 +1933,7 @@ async function saveMarkdownToFolder(overwrite = false) {
                 overwrite: overwrite
             })
         });
-        
+
         let data;
         try {
             data = await response.json();
@@ -1932,12 +1941,12 @@ async function saveMarkdownToFolder(overwrite = false) {
             showNotification('Unexpected server response. Please check the server logs.', 'error');
             return;
         }
-        
+
         if (!response.ok) {
             showNotification(data.error || 'Failed to save file (server error)', 'error');
             return;
         }
-        
+
         if (response.status === 409 && data.needsConfirmation) {
             if (confirm('A file with this name already exists. Overwrite?')) {
                 await saveMarkdownToFolder(true);
@@ -1947,7 +1956,7 @@ async function saveMarkdownToFolder(overwrite = false) {
                 return;
             }
         }
-        
+
         if (data.success) {
             showNotification(data.message, 'success');
             hideDownloadModal();
@@ -1961,11 +1970,11 @@ async function saveMarkdownToFolder(overwrite = false) {
         saveMarkdownBtn.disabled = false;
         saveMarkdownBtn.innerHTML = '<i class="fas fa-save"></i> Save File';
     }
-} 
+}
 
 // Keyboard navigation for download modal
 if (downloadModal) {
-    downloadModal.addEventListener('keydown', function(event) {
+    downloadModal.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') {
             hideDownloadModal();
         } else if (event.key === 'Enter') {
@@ -1974,7 +1983,7 @@ if (downloadModal) {
             }
         }
     });
-} 
+}
 
 function validateDownloadForm() {
     const filename = downloadFilename.value ? downloadFilename.value.trim() : '';
